@@ -119,14 +119,30 @@
 
     <repositories>
         <repository>
-            <id>central</id>
-            <name>Maven Repository Switchboard</name>
-            <url>https://repo.maven.apache.org/maven2</url>
+            <id>tencent</id>
+            <url>https://mirrors.cloud.tencent.com/nexus/repository/maven-public/</url>
             <snapshots>
                 <enabled>false</enabled>
             </snapshots>
         </repository>
     </repositories>
+    <pluginRepositories>
+        <pluginRepository>
+            <id>tencent</id>
+            <url>https://mirrors.cloud.tencent.com/nexus/repository/maven-public/</url>
+        </pluginRepository>
+    </pluginRepositories>
+
+<!--    <repositories>-->
+<!--        <repository>-->
+<!--            <id>central</id>-->
+<!--            <name>Maven Repository Switchboard</name>-->
+<!--            <url>https://repo.maven.apache.org/maven2</url>-->
+<!--            <snapshots>-->
+<!--                <enabled>false</enabled>-->
+<!--            </snapshots>-->
+<!--        </repository>-->
+<!--    </repositories>-->
 
     <distributionManagement>
         <snapshotRepository>
