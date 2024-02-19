@@ -70,6 +70,17 @@
                     <groupId>io.quarkus</groupId>
                     <artifactId>quarkus-maven-plugin</artifactId>
                     <version>${project.version}</version>
+                    <executions>
+                        <execution>
+                            <!-- for now this execution will only dump Quarkus application
+                            dependency checksums that could indicate build time classpath changes -->
+                            <id>track-config-changes</id>
+                            <phase>process-resources</phase>
+                            <goals>
+                                <goal>track-config-changes</goal>
+                            </goals>
+                        </execution>
+                    </executions>
                     <configuration>
                         <noDeps>true</noDeps>
                         <skip>${quarkus.build.skip}</skip>
@@ -254,6 +265,7 @@
                 <module>hibernate-search-orm-opensearch</module>
                 <module>hibernate-search-orm-elasticsearch-tenancy</module>
                 <module>hibernate-orm-tenancy</module>
+                <module>hibernate-orm-jpamodelgen</module>
                 <module>hibernate-orm-envers</module>
                 <module>vertx-http</module>
                 <module>vertx-web</module>
@@ -303,7 +315,7 @@
                 <module>amazon-lambda-rest-resteasy-reactive</module>
                 <module>amazon-lambda-rest-reactive-routes</module>
                 <module>amazon-lambda-rest-funqy</module>
-                <module>amazon-lambda-rest-servlet</module>		
+                <module>amazon-lambda-rest-servlet</module>
                 <module>amazon-lambda-http-resteasy</module>
                 <module>amazon-lambda-http-resteasy-reactive</module>
                 <module>container-image</module>
