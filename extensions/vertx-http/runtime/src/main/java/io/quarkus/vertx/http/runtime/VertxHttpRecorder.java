@@ -60,7 +60,7 @@ import io.quarkus.vertx.http.runtime.management.ManagementInterfaceBuildTimeConf
 import io.quarkus.vertx.http.runtime.management.ManagementInterfaceConfiguration;
 import io.quarkus.vertx.http.runtime.options.HttpServerCommonHandlers;
 import io.quarkus.vertx.http.runtime.options.HttpServerOptionsUtils;
-import io.quarkus.vertx.http.runtime.options.TlsCertificateReloadUtils;
+import io.quarkus.vertx.http.runtime.options.TlsCertificateReloader;
 import io.smallrye.common.vertx.VertxContext;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.AsyncResult;
@@ -171,7 +171,7 @@ public class VertxHttpRecorder {
     private static HttpServerOptions httpMainDomainSocketOptions;
     private static HttpServerOptions httpManagementServerOptions;
 
-    private static final List<Long> taskIds = new CopyOnWriteArrayList<>();
+    private static final List<Long> refresTaskIds = new CopyOnWriteArrayList<>();
     final HttpBuildTimeConfig httpBuildTimeConfig;
     final ManagementInterfaceBuildTimeConfig managementBuildTimeConfig;
     final RuntimeValue<HttpConfiguration> httpConfiguration;
@@ -460,7 +460,8 @@ public class VertxHttpRecorder {
             } else {
                 receiver = new JBossLoggingAccessLogReceiver(accessLog.category);
             }
-            AccessLogHandler handler = new AccessLogHandler(receiver, accessLog.pattern, getClass().getClassLoader(),
+            AccessLogHandler handler = new AccessLogHandler(receiver, accessLog.pattern, accessLog.consolidateReroutedRequests,
+                    getClass().getClassLoader(),
                     accessLog.excludePattern);
             if (rootPath.equals("/") || nonRootPath.equals("/")) {
                 mainRouterRuntimeValue.orElse(httpRouterRuntimeValue).getValue().route()
@@ -634,11 +635,11 @@ public class VertxHttpRecorder {
                                     new IllegalStateException("Unable to start the management interface", ar.cause()));
                         } else {
                             if (httpManagementServerOptions.isSsl()
-                                    && managementConfig.ssl.certificate.reloadPeriod.isPresent()) {
-                                long l = TlsCertificateReloadUtils.handleCertificateReloading(
+                                    && (managementConfig.ssl.certificate.reloadPeriod.isPresent())) {
+                                long l = TlsCertificateReloader.initCertReloadingAction(
                                         vertx, ar.result(), httpManagementServerOptions, managementConfig.ssl);
                                 if (l != -1) {
-                                    taskIds.add(l);
+                                    refresTaskIds.add(l);
                                 }
                             }
 
@@ -822,8 +823,8 @@ public class VertxHttpRecorder {
 
                         // shutdown the management interface
                         try {
-                            for (Long id : taskIds) {
-                                vertx.cancelTimer(id);
+                            for (Long id : refresTaskIds) {
+                                TlsCertificateReloader.unschedule(vertx, id);
                             }
                             if (managementServer != null && !isVertxClose) {
                                 managementServer.close(handler);
@@ -1186,8 +1187,10 @@ public class VertxHttpRecorder {
 
                         if (https) {
                             actualHttpsPort = actualPort;
+                            validateHttpPorts(actualHttpPort, actualHttpsPort);
                         } else {
                             actualHttpPort = actualPort;
+                            validateHttpPorts(actualHttpPort, actualHttpsPort);
                         }
                         if (actualPort != options.getPort()) {
                             // Override quarkus.http(s)?.(test-)?port
@@ -1204,8 +1207,8 @@ public class VertxHttpRecorder {
                             portSystemProperties.set(schema, actualPort, launchMode);
                         }
 
-                        if (https && quarkusConfig.ssl.certificate.reloadPeriod.isPresent()) {
-                            long l = TlsCertificateReloadUtils.handleCertificateReloading(
+                        if (https && (quarkusConfig.ssl.certificate.reloadPeriod.isPresent())) {
+                            long l = TlsCertificateReloader.initCertReloadingAction(
                                     vertx, httpsServer, httpsOptions, quarkusConfig.ssl);
                             if (l != -1) {
                                 reloadingTasks.add(l);
@@ -1219,6 +1222,12 @@ public class VertxHttpRecorder {
 
                     }
                 }
+
+                private void validateHttpPorts(int httpPort, int httpsPort) {
+                    if (httpsPort == httpPort) {
+                        throw new IllegalArgumentException("Both http and https servers started on port " + httpPort);
+                    }
+                }
             });
         }
 
@@ -1226,7 +1235,7 @@ public class VertxHttpRecorder {
         public void stop(Promise<Void> stopFuture) {
 
             for (Long id : reloadingTasks) {
-                vertx.cancelTimer(id);
+                TlsCertificateReloader.unschedule(vertx, id);
             }
 
             final AtomicInteger remainingCount = new AtomicInteger(0);

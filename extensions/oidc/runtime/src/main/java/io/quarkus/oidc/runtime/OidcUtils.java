@@ -82,7 +82,9 @@ public final class OidcUtils {
     public static final String STATE_COOKIE_NAME = "q_auth";
     public static final Integer MAX_COOKIE_VALUE_LENGTH = 4096;
     public static final String POST_LOGOUT_COOKIE_NAME = "q_post_logout";
+    public static final String DEFAULT_SCOPE_SEPARATOR = " ";
     static final String UNDERSCORE = "_";
+    static final String CODE_ACCESS_TOKEN_RESULT = "code_flow_access_token_result";
     static final String COMMA = ",";
     static final Uni<Void> VOID_UNI = Uni.createFrom().voidItem();
     static final BlockingTaskRunner<Void> deleteTokensRequestContext = new BlockingTaskRunner<Void>();
@@ -350,6 +352,10 @@ public final class OidcUtils {
         setSecurityIdentityConfigMetadata(builder, resolvedContext);
         setBlockingApiAttribute(builder, vertxContext);
         setTenantIdAttribute(builder, config);
+        TokenVerificationResult codeFlowAccessTokenResult = (TokenVerificationResult) requestData.get(CODE_ACCESS_TOKEN_RESULT);
+        if (codeFlowAccessTokenResult != null) {
+            builder.addAttribute(CODE_ACCESS_TOKEN_RESULT, codeFlowAccessTokenResult);
+        }
         return builder.build();
     }
 
@@ -547,6 +553,9 @@ public final class OidcUtils {
         if (tenant.authentication.scopes.isEmpty()) {
             tenant.authentication.scopes = provider.authentication.scopes;
         }
+        if (tenant.authentication.scopeSeparator.isEmpty()) {
+            tenant.authentication.scopeSeparator = provider.authentication.scopeSeparator;
+        }
         if (tenant.authentication.addOpenidScope.isEmpty()) {
             tenant.authentication.addOpenidScope = provider.authentication.addOpenidScope;
         }
@@ -656,7 +665,8 @@ public final class OidcUtils {
     }
 
     public static String encodeScopes(OidcTenantConfig oidcConfig) {
-        return OidcCommonUtils.urlEncode(String.join(" ", getAllScopes(oidcConfig)));
+        return OidcCommonUtils.urlEncode(String.join(oidcConfig.authentication.scopeSeparator.orElse(DEFAULT_SCOPE_SEPARATOR),
+                getAllScopes(oidcConfig)));
     }
 
     public static List<String> getAllScopes(OidcTenantConfig oidcConfig) {

@@ -21,7 +21,6 @@
         <gpg.skip>true</gpg.skip>
         <quarkus.build.skip>${skipTests}</quarkus.build.skip>
         <native.surefire.skip>${skipTests}</native.surefire.skip>
-        <enforce-test-deps-scope.skip>true</enforce-test-deps-scope.skip>
     </properties>
 
     <!-- modules are in profile test-modules -->
@@ -37,24 +36,31 @@
                 <artifactId>maven-enforcer-plugin</artifactId>
                 <executions>
                     <execution>
-                        <id>enforce-deployment-deps</id>
+                        <id>enforce</id>
                         <goals>
                             <goal>enforce</goal>
                         </goals>
                         <configuration>
-                            <rules>
+                            <!--
+                                This is a test dependency and as such some test libraries don't have the test scope
+                                which is perfectly fine.
+                                We override the enforcer rules to avoid testing that.
+
+                                Also we add the requiresMinimalDeploymentDependency rule.
+                            -->
+                            <rules combine.self="override">
+                                <dependencyConvergence/>
+                                <externalRules>
+                                    <location>classpath:enforcer-rules/quarkus-banned-dependencies.xml</location>
+                                </externalRules>
+                                <externalRules>
+                                    <location>classpath:enforcer-rules/quarkus-banned-dependencies-okhttp.xml</location>
+                                </externalRules>
                                 <requiresMinimalDeploymentDependency implementation="io.quarkus.enforcer.RequiresMinimalDeploymentDependency"/>
                             </rules>
                         </configuration>
                     </execution>
                 </executions>
-                <dependencies>
-                    <dependency>
-                        <groupId>io.quarkus</groupId>
-                        <artifactId>quarkus-enforcer-rules</artifactId>
-                        <version>${project.version}</version>
-                    </dependency>
-                </dependencies>
             </plugin>
             <plugin>
                 <groupId>org.sonatype.plugins</groupId>
@@ -95,57 +101,6 @@
                                 org.junit.jupiter.api.ClassOrderer$OrderAnnotation
                             </junit.quarkus.orderer.secondary-orderer>
                         </systemPropertyVariables>
-                    </configuration>
-                </plugin>
-
-                <plugin>
-                    <groupId>com.gradle</groupId>
-                    <artifactId>gradle-enterprise-maven-extension</artifactId>
-                    <configuration>
-                        <gradleEnterprise>
-                            <normalization>
-                                <systemProperties>
-                                    <ignoredKeys combine.children="append">
-                                        <ignore>native.image.path</ignore>
-                                        <ignore>quarkus.kubernetes-service-binding.root</ignore>
-                                    </ignoredKeys>
-                                </systemProperties>
-                            </normalization>
-                            <!-- config to avoid unbind-executions confuses gradle enterprise caching-->
-                            <plugins combine.children="append">
-                                <plugin>
-                                    <artifactId>maven-compiler-plugin</artifactId>
-                                    <inputs>
-                                        <fileSets combine.children="append">
-                                            <fileSet>
-                                                <name>specs</name>
-                                                <paths>
-                                                    <path>${project.basedir}/disable-unbind-executions</path>
-                                                </paths>
-                                                <normalization>RELATIVE_PATH</normalization>
-                                            </fileSet>
-                                        </fileSets>
-                                    </inputs>
-                                </plugin>
-                                <plugin>
-                                    <artifactId>maven-failsafe-plugin</artifactId>
-                                    <inputs>
-                                        <fileSets combine.children="append">
-                                            <fileSet>
-                                                <name>native-runner</name>
-                                                <paths>
-                                                    <path>${project.build.directory}</path>
-                                                </paths>
-                                                <includes>
-                                                    <include>*-runner</include>
-                                                </includes>
-                                                <normalization>RELATIVE_PATH</normalization>
-                                            </fileSet>
-                                        </fileSets>
-                                    </inputs>
-                                </plugin>
-                            </plugins>
-                        </gradleEnterprise>
                     </configuration>
                 </plugin>
             </plugins>
@@ -301,7 +256,7 @@
                 <module>oidc-tenancy</module>
                 <module>oidc-wiremock</module>
                 <module>keycloak-authorization</module>
-                <module>csrf-reactive</module>
+                <module>rest-csrf</module>
                 <module>reactive-db2-client</module>
                 <module>reactive-pg-client</module>
                 <module>reactive-mysql-client</module>
@@ -415,6 +370,7 @@
                 <module>grpc-inprocess</module>
                 <module>grpc-vertx</module>
                 <module>grpc-tls</module>
+                <module>grpc-tls-p12</module>
                 <module>grpc-plain-text-gzip</module>
                 <module>grpc-plain-text-mutiny</module>
                 <module>grpc-mutual-auth</module>
