@@ -270,6 +270,14 @@ public class OidcTenantConfig extends OidcCommonConfig {
         public void setLeafCertificateName(String leafCertificateName) {
             this.leafCertificateName = Optional.of(leafCertificateName);
         }
+
+        public Optional<String> getTrustStorePassword() {
+            return trustStorePassword;
+        }
+
+        public void setTrustStorePassword(String trustStorePassword) {
+            this.trustStorePassword = Optional.ofNullable(trustStorePassword);
+        }
     }
 
     /**
@@ -308,12 +316,16 @@ public class OidcTenantConfig extends OidcCommonConfig {
 
     /**
      * Allow inlining UserInfo in IdToken instead of caching it in the token cache.
-     * This property is only checked when an internal IdToken is generated when Oauth2 providers do not return IdToken.
+     * This property is only checked when an internal IdToken is generated when OAuth2 providers do not return IdToken.
      * Inlining UserInfo in the generated IdToken allows to store it in the session cookie and avoids introducing a cached
      * state.
+     * <p>
+     * Inlining UserInfo in the generated IdToken is enabled if the session cookie is encrypted
+     * and the UserInfo cache is not enabled or caching UserInfo is disabled for the current tenant
+     * with the {@link #allowUserInfoCache} property set to `false`.
      */
-    @ConfigItem(defaultValue = "false")
-    public boolean cacheUserInfoInIdtoken = false;
+    @ConfigItem
+    public Optional<Boolean> cacheUserInfoInIdtoken = Optional.empty();
 
     @ConfigGroup
     public static class Logout {
@@ -345,6 +357,7 @@ public class OidcTenantConfig extends OidcCommonConfig {
          * Additional properties which is added as the query parameters to the logout redirect URI.
          */
         @ConfigItem
+        @ConfigDocMapKey("query-parameter-name")
         public Map<String, String> extraParams;
 
         /**
@@ -637,6 +650,33 @@ public class OidcTenantConfig extends OidcCommonConfig {
         @ConfigItem
         public Optional<String> encryptionSecret = Optional.empty();
 
+        /**
+         * Supported session cookie key encryption algorithms
+         */
+        public static enum EncryptionAlgorithm {
+            /**
+             * Content encryption key will be generated and encrypted using the A256GCMKW algorithm and the configured
+             * encryption secret.
+             * The generated content encryption key will be used to encrypt the session cookie content.
+             */
+            A256GCMKW,
+            /**
+             * The configured key encryption secret will be used as the content encryption key to encrypt the session cookie
+             * content.
+             * Using the direct encryption avoids a content encryption key generation step and
+             * will make the encrypted session cookie sequence slightly shorter.
+             * <p/>
+             * Avoid using the direct encryption if the encryption secret is less than 32 characters long.
+             */
+            DIR;
+        }
+
+        /**
+         * Session cookie key encryption algorithm
+         */
+        @ConfigItem(defaultValue = "A256GCMKW")
+        public EncryptionAlgorithm encryptionAlgorithm = EncryptionAlgorithm.A256GCMKW;
+
         public boolean isEncryptionRequired() {
             return encryptionRequired;
         }
@@ -667,6 +707,14 @@ public class OidcTenantConfig extends OidcCommonConfig {
 
         public void setStrategy(Strategy strategy) {
             this.strategy = strategy;
+        }
+
+        public EncryptionAlgorithm getEncryptionAlgorithm() {
+            return encryptionAlgorithm;
+        }
+
+        public void setEncryptionAlgorithm(EncryptionAlgorithm encryptionAlgorithm) {
+            this.encryptionAlgorithm = encryptionAlgorithm;
         }
     }
 
@@ -934,19 +982,36 @@ public class OidcTenantConfig extends OidcCommonConfig {
         public Optional<String> errorPath = Optional.empty();
 
         /**
+         * Relative path to the public endpoint which an authenticated user is redirected to when the session has expired.
+         * <p>
+         * When the OIDC session has expired and the session can not be refreshed, a user is redirected
+         * to the OIDC provider to re-authenticate. The user experience may not be ideal in this case
+         * as it may not be obvious to the authenticated user why an authentication challenge is returned.
+         * <p>
+         * Set this property if you would like the user whose session has expired be redirected to a public application specific
+         * page
+         * instead, which can inform that the session has expired and advise the user to re-authenticated by following
+         * a link to the secured initial entry page.
+         */
+        @ConfigItem
+        public Optional<String> sessionExpiredPath = Optional.empty();
+
+        /**
          * Both ID and access tokens are fetched from the OIDC provider as part of the authorization code flow.
+         * <p>
          * ID token is always verified on every user request as the primary token which is used
          * to represent the principal and extract the roles.
-         * Access token is not verified by default since it is meant to be propagated to the downstream services.
-         * The verification of the access token should be enabled if it is injected as a JWT token.
-         *
-         * Access tokens obtained as part of the code flow are always verified if `quarkus.oidc.roles.source`
-         * property is set to `accesstoken` which means the authorization decision is based on the roles extracted from the
-         * access token.
-         *
-         * Bearer access tokens are always verified.
+         * <p>
+         * Authorization code flow access token is meant to be propagated to downstream services
+         * and is not verified by default unless `quarkus.oidc.roles.source` property is set to `accesstoken`
+         * which means the authorization decision is based on the roles extracted from the access token.
+         * <p>
+         * Authorization code flow access token verification is also enabled if this token is injected as JsonWebToken.
+         * Set this property to `false` if it is not required.
+         * <p>
+         * Bearer access token is always verified.
          */
-        @ConfigItem(defaultValue = "false")
+        @ConfigItem(defaultValueDocumentation = "true when access token is injected as the JsonWebToken bean, false otherwise")
         public boolean verifyAccessToken;
 
         /**
@@ -990,6 +1055,7 @@ public class OidcTenantConfig extends OidcCommonConfig {
          * Additional properties added as query parameters to the authentication redirect URI.
          */
         @ConfigItem
+        @ConfigDocMapKey("parameter-name")
         public Map<String, String> extraParams = new HashMap<>();
 
         /**
@@ -1082,12 +1148,16 @@ public class OidcTenantConfig extends OidcCommonConfig {
 
         /**
          * If this property is set to `true`, an OIDC UserInfo endpoint is called.
-         * This property is enabled if `quarkus.oidc.roles.source` is `userinfo`.
-         * or `quarkus.oidc.token.verify-access-token-with-user-info` is `true`
+         * <p>
+         * This property is enabled automatically if `quarkus.oidc.roles.source` is set to `userinfo`
+         * or `quarkus.oidc.token.verify-access-token-with-user-info` is set to `true`
          * or `quarkus.oidc.authentication.id-token-required` is set to `false`,
-         * you do not need to enable this property manually in these cases.
+         * the current OIDC tenant must support a UserInfo endpoint in these cases.
+         * <p>
+         * It is also enabled automatically if `io.quarkus.oidc.UserInfo` injection point is detected but only
+         * if the current OIDC tenant supports a UserInfo endpoint.
          */
-        @ConfigItem(defaultValueDocumentation = "false")
+        @ConfigItem(defaultValueDocumentation = "true when UserInfo bean is injected, false otherwise")
         public Optional<Boolean> userInfoRequired = Optional.empty();
 
         /**
@@ -1100,6 +1170,16 @@ public class OidcTenantConfig extends OidcCommonConfig {
          */
         @ConfigItem(defaultValue = "5M")
         public Duration sessionAgeExtension = Duration.ofMinutes(5);
+
+        /**
+         * State cookie age in minutes.
+         * State cookie is created every time a new authorization code flow redirect starts
+         * and removed when this flow is completed.
+         * State cookie name is unique by default, see {@link #allowMultipleCodeFlows}.
+         * Keep its age to the reasonable minimum value such as 5 minutes or less.
+         */
+        @ConfigItem(defaultValue = "5M")
+        public Duration stateCookieAge = Duration.ofMinutes(5);
 
         /**
          * If this property is set to `true`, a normal 302 redirect response is returned
@@ -1394,6 +1474,22 @@ public class OidcTenantConfig extends OidcCommonConfig {
         public void setScopeSeparator(String scopeSeparator) {
             this.scopeSeparator = Optional.of(scopeSeparator);
         }
+
+        public Duration getStateCookieAge() {
+            return stateCookieAge;
+        }
+
+        public void setStateCookieAge(Duration stateCookieAge) {
+            this.stateCookieAge = stateCookieAge;
+        }
+
+        public Optional<String> getSessionExpiredPath() {
+            return sessionExpiredPath;
+        }
+
+        public void setSessionExpiredPath(String sessionExpiredPath) {
+            this.sessionExpiredPath = Optional.of(sessionExpiredPath);
+        }
     }
 
     /**
@@ -1407,12 +1503,14 @@ public class OidcTenantConfig extends OidcCommonConfig {
          * which must be included to complete the authorization code grant request.
          */
         @ConfigItem
+        @ConfigDocMapKey("parameter-name")
         public Map<String, String> extraParams = new HashMap<>();
 
         /**
          * Custom HTTP headers which must be sent to complete the authorization code grant request.
          */
         @ConfigItem
+        @ConfigDocMapKey("header-name")
         public Map<String, String> headers = new HashMap<>();
 
         public Map<String, String> getExtraParams() {
@@ -1932,12 +2030,12 @@ public class OidcTenantConfig extends OidcCommonConfig {
         this.allowUserInfoCache = allowUserInfoCache;
     }
 
-    public boolean isCacheUserInfoInIdtoken() {
+    public Optional<Boolean> isCacheUserInfoInIdtoken() {
         return cacheUserInfoInIdtoken;
     }
 
     public void setCacheUserInfoInIdtoken(boolean cacheUserInfoInIdtoken) {
-        this.cacheUserInfoInIdtoken = cacheUserInfoInIdtoken;
+        this.cacheUserInfoInIdtoken = Optional.of(cacheUserInfoInIdtoken);
     }
 
     public IntrospectionCredentials getIntrospectionCredentials() {

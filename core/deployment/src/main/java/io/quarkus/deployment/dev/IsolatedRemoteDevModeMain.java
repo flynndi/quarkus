@@ -37,7 +37,6 @@ import io.quarkus.deployment.dev.remote.DefaultRemoteDevClient;
 import io.quarkus.deployment.dev.remote.RemoteDevClient;
 import io.quarkus.deployment.dev.remote.RemoteDevClientProvider;
 import io.quarkus.deployment.mutability.DevModeTask;
-import io.quarkus.deployment.pkg.PackageConfig;
 import io.quarkus.deployment.pkg.steps.JarResultBuildStep;
 import io.quarkus.deployment.steps.ClassTransformingBuildStep;
 import io.quarkus.dev.spi.DeploymentFailedStartHandler;
@@ -90,7 +89,7 @@ public class IsolatedRemoteDevModeMain implements BiConsumer<CuratedApplication,
             //ok, we have resolved all the deps
             try {
                 AugmentResult start = augmentAction.createProductionApplication();
-                if (!start.getJar().getType().equalsIgnoreCase(PackageConfig.BuiltInType.MUTABLE_JAR.getValue())) {
+                if (!start.getJar().mutable()) {
                     throw new RuntimeException(
                             "remote-dev can only be used with mutable applications i.e. " +
                                     "using the mutable-jar package type");
@@ -254,14 +253,19 @@ public class IsolatedRemoteDevModeMain implements BiConsumer<CuratedApplication,
                     @Override
                     public Map<String, byte[]> apply(Set<String> fileNames) {
                         Map<String, byte[]> ret = new HashMap<>();
-                        for (String i : fileNames) {
+                        for (String filename : fileNames) {
                             try {
-                                Path resolvedPath = appRoot.resolve(i);
+                                Path resolvedPath = appRoot.resolve(filename);
+                                // Ensure that path stays inside appRoot
+                                if (!resolvedPath.startsWith(appRoot)) {
+                                    log.errorf("Attempted to access %s outside of %s", resolvedPath, appRoot);
+                                    continue;
+                                }
                                 if (!Files.isDirectory(resolvedPath)) {
-                                    ret.put(i, Files.readAllBytes(resolvedPath));
+                                    ret.put(filename, Files.readAllBytes(resolvedPath));
                                 }
                             } catch (IOException e) {
-                                log.error("Failed to read file " + i, e);
+                                log.error("Failed to read file " + filename, e);
                             }
                         }
                         return ret;

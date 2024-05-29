@@ -384,6 +384,19 @@
                 </dependency>
                 <dependency>
                     <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-container-image-docker-common</artifactId>
+                    <version>${project.version}</version>
+                    <type>pom</type>
+                    <scope>test</scope>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>*</groupId>
+                            <artifactId>*</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
                     <artifactId>quarkus-container-image-jib</artifactId>
                     <version>${project.version}</version>
                     <type>pom</type>
@@ -398,6 +411,19 @@
                 <dependency>
                     <groupId>io.quarkus</groupId>
                     <artifactId>quarkus-container-image-openshift</artifactId>
+                    <version>${project.version}</version>
+                    <type>pom</type>
+                    <scope>test</scope>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>*</groupId>
+                            <artifactId>*</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-container-image-podman</artifactId>
                     <version>${project.version}</version>
                     <type>pom</type>
                     <scope>test</scope>
@@ -865,7 +891,33 @@
                 </dependency>
                 <dependency>
                     <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-hibernate-search-standalone-elasticsearch</artifactId>
+                    <version>${project.version}</version>
+                    <type>pom</type>
+                    <scope>test</scope>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>*</groupId>
+                            <artifactId>*</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
                     <artifactId>quarkus-hibernate-validator</artifactId>
+                    <version>${project.version}</version>
+                    <type>pom</type>
+                    <scope>test</scope>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>*</groupId>
+                            <artifactId>*</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-infinispan-cache</artifactId>
                     <version>${project.version}</version>
                     <type>pom</type>
                     <scope>test</scope>
@@ -1580,6 +1632,19 @@
                 </dependency>
                 <dependency>
                     <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-observability-devservices</artifactId>
+                    <version>${project.version}</version>
+                    <type>pom</type>
+                    <scope>test</scope>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>*</groupId>
+                            <artifactId>*</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
                     <artifactId>quarkus-oidc</artifactId>
                     <version>${project.version}</version>
                     <type>pom</type>
@@ -2009,6 +2074,149 @@
                 </dependency>
                 <dependency>
                     <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-rest-jackson</artifactId>
+                    <version>${project.version}</version>
+                    <type>pom</type>
+                    <scope>test</scope>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>*</groupId>
+                            <artifactId>*</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-rest-jackson-common</artifactId>
+                    <version>${project.version}</version>
+                    <type>pom</type>
+                    <scope>test</scope>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>*</groupId>
+                            <artifactId>*</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-rest-jaxb</artifactId>
+                    <version>${project.version}</version>
+                    <type>pom</type>
+                    <scope>test</scope>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>*</groupId>
+                            <artifactId>*</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-rest-jsonb</artifactId>
+                    <version>${project.version}</version>
+                    <type>pom</type>
+                    <scope>test</scope>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>*</groupId>
+                            <artifactId>*</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-rest-jsonb-common</artifactId>
+                    <version>${project.version}</version>
+                    <type>pom</type>
+                    <scope>test</scope>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>*</groupId>
+                            <artifactId>*</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-rest-kotlin</artifactId>
+                    <version>${project.version}</version>
+                    <type>pom</type>
+                    <scope>test</scope>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>*</groupId>
+                            <artifactId>*</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-rest-kotlin-serialization</artifactId>
+                    <version>${project.version}</version>
+                    <type>pom</type>
+                    <scope>test</scope>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>*</groupId>
+                            <artifactId>*</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-rest-kotlin-serialization-common</artifactId>
+                    <version>${project.version}</version>
+                    <type>pom</type>
+                    <scope>test</scope>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>*</groupId>
+                            <artifactId>*</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-rest-links</artifactId>
+                    <version>${project.version}</version>
+                    <type>pom</type>
+                    <scope>test</scope>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>*</groupId>
+                            <artifactId>*</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-rest-qute</artifactId>
+                    <version>${project.version}</version>
+                    <type>pom</type>
+                    <scope>test</scope>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>*</groupId>
+                            <artifactId>*</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-rest-servlet</artifactId>
+                    <version>${project.version}</version>
+                    <type>pom</type>
+                    <scope>test</scope>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>*</groupId>
+                            <artifactId>*</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
                     <artifactId>quarkus-resteasy</artifactId>
                     <version>${project.version}</version>
                     <type>pom</type>
@@ -2231,149 +2439,6 @@
                 <dependency>
                     <groupId>io.quarkus</groupId>
                     <artifactId>quarkus-resteasy-server-common</artifactId>
-                    <version>${project.version}</version>
-                    <type>pom</type>
-                    <scope>test</scope>
-                    <exclusions>
-                        <exclusion>
-                            <groupId>*</groupId>
-                            <artifactId>*</artifactId>
-                        </exclusion>
-                    </exclusions>
-                </dependency>
-                <dependency>
-                    <groupId>io.quarkus</groupId>
-                    <artifactId>quarkus-rest-jackson</artifactId>
-                    <version>${project.version}</version>
-                    <type>pom</type>
-                    <scope>test</scope>
-                    <exclusions>
-                        <exclusion>
-                            <groupId>*</groupId>
-                            <artifactId>*</artifactId>
-                        </exclusion>
-                    </exclusions>
-                </dependency>
-                <dependency>
-                    <groupId>io.quarkus</groupId>
-                    <artifactId>quarkus-rest-jackson-common</artifactId>
-                    <version>${project.version}</version>
-                    <type>pom</type>
-                    <scope>test</scope>
-                    <exclusions>
-                        <exclusion>
-                            <groupId>*</groupId>
-                            <artifactId>*</artifactId>
-                        </exclusion>
-                    </exclusions>
-                </dependency>
-                <dependency>
-                    <groupId>io.quarkus</groupId>
-                    <artifactId>quarkus-rest-jaxb</artifactId>
-                    <version>${project.version}</version>
-                    <type>pom</type>
-                    <scope>test</scope>
-                    <exclusions>
-                        <exclusion>
-                            <groupId>*</groupId>
-                            <artifactId>*</artifactId>
-                        </exclusion>
-                    </exclusions>
-                </dependency>
-                <dependency>
-                    <groupId>io.quarkus</groupId>
-                    <artifactId>quarkus-rest-jsonb</artifactId>
-                    <version>${project.version}</version>
-                    <type>pom</type>
-                    <scope>test</scope>
-                    <exclusions>
-                        <exclusion>
-                            <groupId>*</groupId>
-                            <artifactId>*</artifactId>
-                        </exclusion>
-                    </exclusions>
-                </dependency>
-                <dependency>
-                    <groupId>io.quarkus</groupId>
-                    <artifactId>quarkus-rest-jsonb-common</artifactId>
-                    <version>${project.version}</version>
-                    <type>pom</type>
-                    <scope>test</scope>
-                    <exclusions>
-                        <exclusion>
-                            <groupId>*</groupId>
-                            <artifactId>*</artifactId>
-                        </exclusion>
-                    </exclusions>
-                </dependency>
-                <dependency>
-                    <groupId>io.quarkus</groupId>
-                    <artifactId>quarkus-rest-kotlin</artifactId>
-                    <version>${project.version}</version>
-                    <type>pom</type>
-                    <scope>test</scope>
-                    <exclusions>
-                        <exclusion>
-                            <groupId>*</groupId>
-                            <artifactId>*</artifactId>
-                        </exclusion>
-                    </exclusions>
-                </dependency>
-                <dependency>
-                    <groupId>io.quarkus</groupId>
-                    <artifactId>quarkus-rest-kotlin-serialization</artifactId>
-                    <version>${project.version}</version>
-                    <type>pom</type>
-                    <scope>test</scope>
-                    <exclusions>
-                        <exclusion>
-                            <groupId>*</groupId>
-                            <artifactId>*</artifactId>
-                        </exclusion>
-                    </exclusions>
-                </dependency>
-                <dependency>
-                    <groupId>io.quarkus</groupId>
-                    <artifactId>quarkus-rest-kotlin-serialization-common</artifactId>
-                    <version>${project.version}</version>
-                    <type>pom</type>
-                    <scope>test</scope>
-                    <exclusions>
-                        <exclusion>
-                            <groupId>*</groupId>
-                            <artifactId>*</artifactId>
-                        </exclusion>
-                    </exclusions>
-                </dependency>
-                <dependency>
-                    <groupId>io.quarkus</groupId>
-                    <artifactId>quarkus-rest-links</artifactId>
-                    <version>${project.version}</version>
-                    <type>pom</type>
-                    <scope>test</scope>
-                    <exclusions>
-                        <exclusion>
-                            <groupId>*</groupId>
-                            <artifactId>*</artifactId>
-                        </exclusion>
-                    </exclusions>
-                </dependency>
-                <dependency>
-                    <groupId>io.quarkus</groupId>
-                    <artifactId>quarkus-rest-qute</artifactId>
-                    <version>${project.version}</version>
-                    <type>pom</type>
-                    <scope>test</scope>
-                    <exclusions>
-                        <exclusion>
-                            <groupId>*</groupId>
-                            <artifactId>*</artifactId>
-                        </exclusion>
-                    </exclusions>
-                </dependency>
-                <dependency>
-                    <groupId>io.quarkus</groupId>
-                    <artifactId>quarkus-rest-servlet</artifactId>
                     <version>${project.version}</version>
                     <type>pom</type>
                     <scope>test</scope>
@@ -2854,7 +2919,7 @@
                 </dependency>
                 <dependency>
                     <groupId>io.quarkus</groupId>
-                    <artifactId>quarkus-webjars-locator</artifactId>
+                    <artifactId>quarkus-web-dependency-locator</artifactId>
                     <version>${project.version}</version>
                     <type>pom</type>
                     <scope>test</scope>

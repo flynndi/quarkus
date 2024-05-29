@@ -79,7 +79,7 @@
         </dependency>
         <dependency>
             <groupId>org.graalvm.sdk</groupId>
-            <artifactId>graal-sdk</artifactId>
+            <artifactId>nativeimage</artifactId>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -148,6 +148,7 @@
                     </lesserPriorityArtifacts>
                     <parentFirstArtifacts>
                         <parentFirstArtifact>io.quarkus:quarkus-bootstrap-runner</parentFirstArtifact>
+                        <parentFirstArtifact>io.quarkus:quarkus-classloader-commons</parentFirstArtifact>
                         <parentFirstArtifact>io.smallrye.common:smallrye-common-constraint</parentFirstArtifact>
                         <parentFirstArtifact>io.smallrye.common:smallrye-common-cpu</parentFirstArtifact>
                         <parentFirstArtifact>io.smallrye.common:smallrye-common-expression</parentFirstArtifact>
@@ -156,10 +157,11 @@
                         <parentFirstArtifact>io.smallrye.common:smallrye-common-net</parentFirstArtifact>
                         <parentFirstArtifact>io.smallrye.common:smallrye-common-os</parentFirstArtifact>
                         <parentFirstArtifact>io.smallrye.common:smallrye-common-ref</parentFirstArtifact>
-                        <parentFirstArtifact>org.graalvm.sdk:graal-sdk</parentFirstArtifact>
+                        <parentFirstArtifact>org.graalvm.sdk:nativeimage</parentFirstArtifact>
                         <!-- support for GraalVM js -->
                         <parentFirstArtifact>org.graalvm.polyglot:js-community</parentFirstArtifact>
                         <parentFirstArtifact>org.graalvm.js:js-language</parentFirstArtifact>
+                        <parentFirstArtifact>org.graalvm.js:js-scriptengine</parentFirstArtifact>
                         <parentFirstArtifact>org.graalvm.polyglot:js</parentFirstArtifact>
                         <parentFirstArtifact>org.graalvm.polyglot:polyglot</parentFirstArtifact>
                         <parentFirstArtifact>org.graalvm.regex:regex</parentFirstArtifact>
@@ -170,7 +172,7 @@
                         <parentFirstArtifact>org.graalvm.shadowed:icu4j</parentFirstArtifact>
                         <parentFirstArtifact>org.graalvm.sdk:jniutils</parentFirstArtifact>
                         <parentFirstArtifact>org.graalvm.sdk:word</parentFirstArtifact>
-                        <parentFirstArtifact>org.graalvm.sdk:native-image</parentFirstArtifact>
+                        <parentFirstArtifact>org.graalvm.sdk:collections</parentFirstArtifact>
                         <parentFirstArtifact>org.graalvm.sdk:native-bridge</parentFirstArtifact>
                         <!-- /support for GraalVM js -->
                         <parentFirstArtifact>io.quarkus:quarkus-bootstrap-core</parentFirstArtifact>
@@ -217,10 +219,11 @@
                         <parentFirstArtifact>org.jboss.byteman:byteman</parentFirstArtifact>
                     </parentFirstArtifacts>
                     <runnerParentFirstArtifacts>
-                        <runnerParentFirstArtifact>org.graalvm.sdk:graal-sdk</runnerParentFirstArtifact>
+                        <runnerParentFirstArtifact>org.graalvm.sdk:nativeimage</runnerParentFirstArtifact>
                         <!-- support for GraalVM js -->
                         <runnerParentFirstArtifact>org.graalvm.polyglot:js-community</runnerParentFirstArtifact>
                         <runnerParentFirstArtifact>org.graalvm.js:js-language</runnerParentFirstArtifact>
+                        <runnerParentFirstArtifact>org.graalvm.js:js-scriptengine</runnerParentFirstArtifact>
                         <runnerParentFirstArtifact>org.graalvm.polyglot:js</runnerParentFirstArtifact>
                         <runnerParentFirstArtifact>org.graalvm.polyglot:polyglot</runnerParentFirstArtifact>
                         <runnerParentFirstArtifact>org.graalvm.regex:regex</runnerParentFirstArtifact>
@@ -231,10 +234,11 @@
                         <runnerParentFirstArtifact>org.graalvm.shadowed:icu4j</runnerParentFirstArtifact>
                         <runnerParentFirstArtifact>org.graalvm.sdk:jniutils</runnerParentFirstArtifact>
                         <runnerParentFirstArtifact>org.graalvm.sdk:word</runnerParentFirstArtifact>
-                        <runnerParentFirstArtifact>org.graalvm.sdk:native-image</runnerParentFirstArtifact>
+                        <runnerParentFirstArtifact>org.graalvm.sdk:collections</runnerParentFirstArtifact>
                         <runnerParentFirstArtifact>org.graalvm.sdk:native-bridge</runnerParentFirstArtifact>
                         <!-- /support for GraalVM js -->
                         <runnerParentFirstArtifact>io.quarkus:quarkus-bootstrap-runner</runnerParentFirstArtifact>
+                        <runnerParentFirstArtifact>io.quarkus:quarkus-classloader-commons</runnerParentFirstArtifact>
                         <runnerParentFirstArtifact>io.quarkus:quarkus-development-mode-spi</runnerParentFirstArtifact>
                         <!-- logging dependencies always need to be loaded by the JDK ClassLoader -->
                         <runnerParentFirstArtifact>org.jboss.logging:jboss-logging</runnerParentFirstArtifact>

@@ -35,7 +35,6 @@ import io.quarkus.oidc.AuthorizationCodeTokens;
 import io.quarkus.oidc.OIDCException;
 import io.quarkus.oidc.OidcConfigurationMetadata;
 import io.quarkus.oidc.OidcTenantConfig;
-import io.quarkus.oidc.OidcTenantConfig.CertificateChain;
 import io.quarkus.oidc.TokenCustomizer;
 import io.quarkus.oidc.TokenIntrospection;
 import io.quarkus.oidc.UserInfo;
@@ -50,7 +49,6 @@ import io.smallrye.mutiny.Uni;
 public class OidcProvider implements Closeable {
 
     private static final Logger LOG = Logger.getLogger(OidcProvider.class);
-    private static final String ANY_ISSUER = "any";
     private static final String ANY_AUDIENCE = "any";
     private static final String[] ASYMMETRIC_SUPPORTED_ALGORITHMS = new String[] { SignatureAlgorithm.RS256.getAlgorithm(),
             SignatureAlgorithm.RS384.getAlgorithm(),
@@ -66,7 +64,9 @@ public class OidcProvider implements Closeable {
             AlgorithmConstraints.ConstraintType.PERMIT, ASYMMETRIC_SUPPORTED_ALGORITHMS);
     private static final AlgorithmConstraints SYMMETRIC_ALGORITHM_CONSTRAINTS = new AlgorithmConstraints(
             AlgorithmConstraints.ConstraintType.PERMIT, SignatureAlgorithm.HS256.getAlgorithm());
+    static final String ANY_ISSUER = "any";
 
+    private final List<Validator> customValidators;
     final OidcProviderClient client;
     final RefreshableVerificationKeyResolver asymmetricKeyResolver;
     final DynamicVerificationKeyResolver keyResolverProvider;
@@ -79,19 +79,19 @@ public class OidcProvider implements Closeable {
     final AlgorithmConstraints requiredAlgorithmConstraints;
 
     public OidcProvider(OidcProviderClient client, OidcTenantConfig oidcConfig, JsonWebKeySet jwks, Key tokenDecryptionKey) {
-        this(client, oidcConfig, jwks, TokenCustomizerFinder.find(oidcConfig), tokenDecryptionKey);
+        this(client, oidcConfig, jwks, TenantFeatureFinder.find(oidcConfig), tokenDecryptionKey,
+                TenantFeatureFinder.find(oidcConfig, Validator.class));
     }
 
     public OidcProvider(OidcProviderClient client, OidcTenantConfig oidcConfig, JsonWebKeySet jwks,
-            TokenCustomizer tokenCustomizer, Key tokenDecryptionKey) {
+            TokenCustomizer tokenCustomizer, Key tokenDecryptionKey, List<Validator> customValidators) {
         this.client = client;
         this.oidcConfig = oidcConfig;
         this.tokenCustomizer = tokenCustomizer;
         if (jwks != null) {
-            this.asymmetricKeyResolver = new JsonWebKeyResolver(jwks, oidcConfig.token.forcedJwkRefreshInterval,
-                    oidcConfig.certificateChain);
+            this.asymmetricKeyResolver = new JsonWebKeyResolver(jwks, oidcConfig.token.forcedJwkRefreshInterval);
         } else if (oidcConfig != null && oidcConfig.certificateChain.trustStoreFile.isPresent()) {
-            this.asymmetricKeyResolver = new CertChainPublicKeyResolver(oidcConfig.certificateChain);
+            this.asymmetricKeyResolver = new CertChainPublicKeyResolver(oidcConfig);
         } else {
             this.asymmetricKeyResolver = null;
         }
@@ -106,16 +106,17 @@ public class OidcProvider implements Closeable {
         this.requiredClaims = checkRequiredClaimsProp();
         this.tokenDecryptionKey = tokenDecryptionKey;
         this.requiredAlgorithmConstraints = checkSignatureAlgorithm();
+        this.customValidators = customValidators == null ? List.of() : customValidators;
     }
 
     public OidcProvider(String publicKeyEnc, OidcTenantConfig oidcConfig, Key tokenDecryptionKey) {
         this.client = null;
         this.oidcConfig = oidcConfig;
-        this.tokenCustomizer = TokenCustomizerFinder.find(oidcConfig);
+        this.tokenCustomizer = TenantFeatureFinder.find(oidcConfig);
         if (publicKeyEnc != null) {
             this.asymmetricKeyResolver = new LocalPublicKeyResolver(publicKeyEnc);
         } else if (oidcConfig.certificateChain.trustStoreFile.isPresent()) {
-            this.asymmetricKeyResolver = new CertChainPublicKeyResolver(oidcConfig.certificateChain);
+            this.asymmetricKeyResolver = new CertChainPublicKeyResolver(oidcConfig);
         } else {
             throw new IllegalStateException("Neither public key nor certificate chain verification modes are enabled");
         }
@@ -125,6 +126,7 @@ public class OidcProvider implements Closeable {
         this.requiredClaims = checkRequiredClaimsProp();
         this.tokenDecryptionKey = tokenDecryptionKey;
         this.requiredAlgorithmConstraints = checkSignatureAlgorithm();
+        this.customValidators = TenantFeatureFinder.find(oidcConfig, Validator.class);
     }
 
     private AlgorithmConstraints checkSignatureAlgorithm() {
@@ -208,6 +210,10 @@ public class OidcProvider implements Closeable {
 
         if (nonce != null) {
             builder.registerValidator(new CustomClaimsValidator(Map.of(OidcConstants.NONCE, nonce)));
+        }
+
+        for (Validator customValidator : customValidators) {
+            builder.registerValidator(customValidator);
         }
 
         if (issuedAtRequired) {
@@ -419,11 +425,11 @@ public class OidcProvider implements Closeable {
         volatile long forcedJwksRefreshIntervalMilliSecs;
         final CertChainPublicKeyResolver chainResolverFallback;
 
-        JsonWebKeyResolver(JsonWebKeySet jwks, Duration forcedJwksRefreshInterval, CertificateChain chain) {
+        JsonWebKeyResolver(JsonWebKeySet jwks, Duration forcedJwksRefreshInterval) {
             this.jwks = jwks;
             this.forcedJwksRefreshIntervalMilliSecs = forcedJwksRefreshInterval.toMillis();
-            if (chain.trustStoreFile.isPresent()) {
-                chainResolverFallback = new CertChainPublicKeyResolver(chain);
+            if (oidcConfig.certificateChain.trustStoreFile.isPresent()) {
+                chainResolverFallback = new CertChainPublicKeyResolver(oidcConfig);
             } else {
                 chainResolverFallback = null;
             }
@@ -567,7 +573,7 @@ public class OidcProvider implements Closeable {
     }
 
     public OidcConfigurationMetadata getMetadata() {
-        return client.getMetadata();
+        return client == null ? null : client.getMetadata();
     }
 
     private static class CustomClaimsValidator implements Validator {
@@ -598,4 +604,5 @@ public class OidcProvider implements Closeable {
             return null;
         }
     }
+
 }

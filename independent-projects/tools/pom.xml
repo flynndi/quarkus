@@ -39,7 +39,7 @@
         <!-- These properties are used by CreateProjectMojo to add the Maven Wrapper -->
         <proposed-maven-version>3.9.6</proposed-maven-version>
         <maven-wrapper.version>3.2.0</maven-wrapper.version>
-        <gradle-wrapper.version>8.6</gradle-wrapper.version>
+        <gradle-wrapper.version>8.7</gradle-wrapper.version>
 
         <!-- These properties are needed in order for them to be resolvable by the generated projects -->
         <compiler-plugin.version>3.12.1</compiler-plugin.version>
@@ -48,20 +48,20 @@
         <scala-plugin.version>4.4.0</scala-plugin.version>
 
         <!-- Versions -->
-        <assertj.version>3.25.3</assertj.version>
-        <jackson-bom.version>2.16.1</jackson-bom.version>
-        <jakarta.enterprise.cdi-api.version>4.0.1</jakarta.enterprise.cdi-api.version>
+        <assertj.version>3.26.0</assertj.version>
+        <jackson-bom.version>2.17.1</jackson-bom.version>
+        <jakarta.enterprise.cdi-api.version>4.1.0</jakarta.enterprise.cdi-api.version>
         <junit.version>5.10.2</junit.version>
-        <commons-compress.version>1.26.0</commons-compress.version>
-        <jboss-logging.version>3.5.3.Final</jboss-logging.version>
-        <mockito.version>5.10.0</mockito.version>
+        <commons-compress.version>1.26.2</commons-compress.version>
+        <jboss-logging.version>3.6.0.Final</jboss-logging.version>
+        <mockito.version>5.12.0</mockito.version>
         <version.enforcer.plugin>3.2.1</version.enforcer.plugin>
         <version.surefire.plugin>3.2.5</version.surefire.plugin>
         <quarkus.version>${project.version}</quarkus.version>
-        <maven-model-helper.version>28</maven-model-helper.version>
-        <jandex.version>3.1.6</jandex.version>
+        <maven-model-helper.version>36</maven-model-helper.version>
+        <jandex.version>3.2.0</jandex.version>
         <system-stubs-jupiter.version>2.0.2</system-stubs-jupiter.version>
-        <awaitility.version>4.2.0</awaitility.version>
+        <awaitility.version>4.2.1</awaitility.version>
     </properties>
     <modules>
         <module>registry-client</module>
@@ -279,7 +279,7 @@
             <plugin>
                 <groupId>net.revelc.code</groupId>
                 <artifactId>impsort-maven-plugin</artifactId>
-                <version>1.9.0</version>
+                <version>1.10.0</version>
                 <configuration>
                     <!-- store outside of target to speed up formatting when mvn clean is used -->
                     <cachedir>.cache/impsort-maven-plugin-${impsort-maven-plugin.version}</cachedir>

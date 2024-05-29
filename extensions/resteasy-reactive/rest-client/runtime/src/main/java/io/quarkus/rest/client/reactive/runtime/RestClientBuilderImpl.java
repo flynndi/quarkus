@@ -10,6 +10,7 @@ import java.security.KeyStore;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -34,6 +35,7 @@ import org.jboss.resteasy.reactive.client.handlers.RedirectHandler;
 import org.jboss.resteasy.reactive.client.impl.ClientBuilderImpl;
 import org.jboss.resteasy.reactive.client.impl.ClientImpl;
 import org.jboss.resteasy.reactive.client.impl.WebTargetImpl;
+import org.jboss.resteasy.reactive.client.impl.multipart.PausableHttpPostRequestEncoder;
 import org.jboss.resteasy.reactive.common.jaxrs.ConfigurationImpl;
 import org.jboss.resteasy.reactive.common.jaxrs.MultiQueryParamMode;
 
@@ -63,6 +65,7 @@ public class RestClientBuilderImpl implements RestClientBuilder {
     private boolean followRedirects;
     private QueryParamStyle queryParamStyle;
 
+    private String multipartPostEncoderMode;
     private String proxyHost;
     private Integer proxyPort;
     private String proxyUser;
@@ -167,6 +170,11 @@ public class RestClientBuilderImpl implements RestClientBuilder {
         return this;
     }
 
+    public RestClientBuilderImpl multipartPostEncoderMode(String mode) {
+        this.multipartPostEncoderMode = mode;
+        return this;
+    }
+
     public RestClientBuilderImpl clientLogger(ClientLogger clientLogger) {
         this.clientLogger = clientLogger;
         return this;
@@ -195,7 +203,7 @@ public class RestClientBuilderImpl implements RestClientBuilder {
     @Override
     public RestClientBuilderImpl executorService(ExecutorService executor) {
         throw new IllegalArgumentException("Specifying executor service is not supported. " +
-                "The underlying call in RestEasy Reactive is non-blocking, " +
+                "The underlying call is non-blocking, " +
                 "there is no reason to offload the call to a separate thread pool.");
     }
 
@@ -435,6 +443,21 @@ public class RestClientBuilderImpl implements RestClientBuilder {
             configureProxy(globalProxy.host, globalProxy.port, restClientsConfig.proxyUser.orElse(null),
                     restClientsConfig.proxyPassword.orElse(null), restClientsConfig.nonProxyHosts.orElse(null));
         }
+
+        if (!clientBuilder.getConfiguration().hasProperty(QuarkusRestClientProperties.MULTIPART_ENCODER_MODE)) {
+            PausableHttpPostRequestEncoder.EncoderMode multipartPostEncoderMode = null;
+            if (this.multipartPostEncoderMode != null) {
+                multipartPostEncoderMode = PausableHttpPostRequestEncoder.EncoderMode
+                        .valueOf(this.multipartPostEncoderMode.toUpperCase(Locale.ROOT));
+            } else if (restClientsConfig.multipartPostEncoderMode.isPresent()) {
+                multipartPostEncoderMode = PausableHttpPostRequestEncoder.EncoderMode
+                        .valueOf(restClientsConfig.multipartPostEncoderMode.get().toUpperCase(Locale.ROOT));
+            }
+            if (multipartPostEncoderMode != null) {
+                clientBuilder.property(QuarkusRestClientProperties.MULTIPART_ENCODER_MODE, multipartPostEncoderMode);
+            }
+        }
+
         ClientImpl client = clientBuilder.build();
         WebTargetImpl target = (WebTargetImpl) client.target(uri);
         target.setParamConverterProviders(paramConverterProviders);

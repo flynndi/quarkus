@@ -166,6 +166,7 @@ public class OidcIdentityProvider implements IdentityProvider<TokenAuthenticatio
                     @Override
                     public Uni<SecurityIdentity> apply(TokenVerificationResult codeAccessToken, Throwable t) {
                         if (t != null) {
+                            requestData.put(OidcUtils.CODE_ACCESS_TOKEN_FAILURE, t);
                             return Uni.createFrom().failure(new AuthenticationFailedException(t));
                         }
 
@@ -217,6 +218,7 @@ public class OidcIdentityProvider implements IdentityProvider<TokenAuthenticatio
                                     public Uni<SecurityIdentity> apply(TokenVerificationResult codeAccessTokenResult,
                                             Throwable t) {
                                         if (t != null) {
+                                            requestData.put(OidcUtils.CODE_ACCESS_TOKEN_FAILURE, t);
                                             return Uni.createFrom().failure(t instanceof AuthenticationFailedException ? t
                                                     : new AuthenticationFailedException(t));
                                         }
@@ -583,7 +585,7 @@ public class OidcIdentityProvider implements IdentityProvider<TokenAuthenticatio
 
     private Uni<UserInfo> getUserInfoUni(Map<String, Object> requestData, TokenAuthenticationRequest request,
             TenantConfigContext resolvedContext) {
-        if (isInternalIdToken(request) && resolvedContext.oidcConfig.cacheUserInfoInIdtoken) {
+        if (isInternalIdToken(request) && OidcUtils.cacheUserInfoInIdToken(tenantResolver, resolvedContext.oidcConfig)) {
             JsonObject userInfo = OidcUtils.decodeJwtContent(request.getToken().getToken())
                     .getJsonObject(OidcUtils.USER_INFO_ATTRIBUTE);
             if (userInfo != null) {
@@ -615,7 +617,7 @@ public class OidcIdentityProvider implements IdentityProvider<TokenAuthenticatio
     private Uni<UserInfo> newUserInfoUni(TenantConfigContext resolvedContext, String accessToken) {
         Uni<UserInfo> userInfoUni = resolvedContext.provider.getUserInfo(accessToken);
         if (tenantResolver.getUserInfoCache() == null || !resolvedContext.oidcConfig.allowUserInfoCache
-                || resolvedContext.oidcConfig.cacheUserInfoInIdtoken) {
+                || OidcUtils.cacheUserInfoInIdToken(tenantResolver, resolvedContext.oidcConfig)) {
             return userInfoUni;
         } else {
             return userInfoUni.call(new Function<UserInfo, Uni<?>>() {

@@ -15,7 +15,11 @@ You can use Quarkus extensions for OpenID Connect and OAuth 2.0 access token man
 This includes the following:
 
  - Using `quarkus-oidc-client`, `quarkus-rest-client-oidc-filter` and `quarkus-resteasy-client-oidc-filter` extensions to acquire and refresh access tokens from OpenID Connect and OAuth 2.0 compliant Authorization Servers such as link:https://www.keycloak.org[Keycloak].
+
+ifndef::no-quarkus-oidc-token-propagation[]
+
  - Using `quarkus-rest-client-oidc-token-propagation` and `quarkus-resteasy-client-oidc-token-propagation` extensions to propagate the current `Bearer` or `Authorization Code Flow` access tokens.
+endif::no-quarkus-oidc-token-propagation[]
 
 The access tokens managed by these extensions can be used as HTTP Authorization Bearer tokens to access the remote services.
 
@@ -160,45 +164,75 @@ Then, you can use the `OidcClient.accessTokens` method to accept a Map of extra 
 You might need to request that a specific set of scopes be associated with an issued access token.
 Use a dedicated `quarkus.oidc-client.scopes` list property, for example: `quarkus.oidc-client.scopes=email,phone`
 
+[[use-oidc-client-directly]]
 === Use OidcClient directly
 
-One can use `OidcClient` directly as follows:
+You can use `OidcClient` directly to acquire access tokens and set them in an HTTP `Authorization` header as a `Bearer` scheme value.
+
+For example, let's assume the Quarkus endpoint has to access a microservice that returns a user name.
+First, create a REST client:
 
 [source,java]
 ----
-import jakarta.inject.PostConstruct;
+package org.acme.security.openid.connect.client;
+
+import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
+
+import io.smallrye.mutiny.Uni;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.HeaderParam;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.Produces;
+
+@RegisterRestClient
+@Path("/")
+public interface RestClientWithTokenHeaderParam {
+
+    @GET
+    @Produces("text/plain")
+    @Path("userName")
+    Uni<String> getUserName(@HeaderParam("Authorization") String authorization);
+}
+----
+
+Now, use `OidcClient` to acquire the tokens and propagate them:
+
+[source,java]
+----
+package org.acme.security.openid.connect.client;
+
+import org.eclipse.microprofile.rest.client.inject.RestClient;
+
+import io.quarkus.oidc.client.runtime.TokensHelper;
+import io.quarkus.oidc.client.OidcClient;
+
+import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
-
-import io.quarkus.oidc.client.OidcClient;
-import io.quarkus.oidc.client.Tokens;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.Produces;
 
 @Path("/service")
 public class OidcClientResource {
 
     @Inject
     OidcClient client;
+    TokensHelper tokenHelper = new TokensHelper(); <1>
 
-    volatile Tokens currentTokens;
-
-    @PostConstruct
-    public void init() {
-        currentTokens = client.getTokens().await().indefinitely();
-    }
+    @Inject
+    @RestClient
+    RestClientWithTokenHeaderParam restClient;
 
     @GET
-    public String getResponse() {
-
-        Tokens tokens = currentTokens;
-        if (tokens.isAccessTokenExpired()) {
-            // Add @Blocking method annotation if this code is used with the REST Client
-            tokens = client.refreshTokens(tokens.getRefreshToken()).await().indefinitely();
-            currentTokens = tokens;
-        }
-        // Use tokens.getAccessToken() to configure MP RestClient Authorization header/etc
+    @Path("user-name")
+    @Produces("text/plain")
+    public Uni<String> getUserName() {
+    	return tokenHelper.getTokens(client).onItem()
+        		.transformToUni(tokens -> restClient.getUserName("Bearer " + tokens.getAccessToken()));
     }
 }
 ----
+<1> `io.quarkus.oidc.client.runtime.TokensHelper` manages the access token acquisition and refresh.
 
 === Inject tokens
 
@@ -244,30 +278,42 @@ In this case, the default client is disabled with a `client-enabled=false` prope
 
 [source,java]
 ----
+import org.eclipse.microprofile.rest.client.inject.RestClient;
+
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
-
+import io.smallrye.mutiny.Uni;
 import io.quarkus.oidc.client.OidcClient;
 import io.quarkus.oidc.client.OidcClients;
+import io.quarkus.oidc.client.runtime.TokensHelper;
 
 @Path("/clients")
 public class OidcClientResource {
 
     @Inject
     OidcClients clients;
+    TokensHelper tokenHelper = new TokensHelper();
+
+    @Inject
+    @RestClient
+    RestClientWithTokenHeaderParam restClient; <1>
 
     @GET
-    public String getResponse() {
-        OidcClient client = clients.getClient("jwt-secret");
-        //Use this client to get the token
+    @Path("user-name")
+    @Produces("text/plain")
+    public Uni<String> getUserName() {
+    	OidcClient client = clients.getClient("jwt-secret");
+    	return tokenHelper.getTokens(client).onItem()
+        		.transformToUni(tokens -> restClient.getUserName("Bearer " + tokens.getAccessToken()));
     }
 }
 ----
+<1> See the `RestClientWithTokenHeaderParam` declaration in the <<use-oidc-client-directly>> section.
 
 [NOTE]
 ====
-If you also use xref:security-openid-connect-multitenancy.adoc[OIDC multitenancy], and each OIDC tenant has its own associated `OidcClient`, you can use a Vert.x `RoutingContext` `tenantId` attribute. For example:
+If you also use xref:security-openid-connect-multitenancy.adoc[OIDC multitenancy], and each OIDC tenant has its own associated `OidcClient`, you can use a Vert.x `RoutingContext` `tenant-id` attribute. For example:
 
 [source,java]
 ----
@@ -289,7 +335,7 @@ public class OidcClientResource {
 
     @GET
     public String getResponse() {
-        String tenantId = context.get("tenantId");
+        String tenantId = context.get("tenant-id");
         // named OIDC tenant and client configurations use the same key:
         OidcClient client = clients.getClient(tenantId);
         //Use this client to get the token
@@ -298,38 +344,93 @@ public class OidcClientResource {
 ----
 ====
 
-If you need, you can also create a new `OidcClient` programmatically like this:
+You can also create a new `OidcClient` programmatically.
+For example, let's assume you must create it at startup time:
 
 [source,java]
 ----
+package org.acme.security.openid.connect.client;
+
+import java.util.Map;
+
+import org.eclipse.microprofile.config.inject.ConfigProperty;
+
+import io.quarkus.oidc.client.OidcClient;
+import io.quarkus.oidc.client.OidcClientConfig;
+import io.quarkus.oidc.client.OidcClientConfig.Grant.Type;
+import io.quarkus.oidc.client.OidcClients;
+import io.quarkus.runtime.StartupEvent;
+import io.smallrye.mutiny.Uni;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
+import jakarta.i
+nject.Inject;
+
+@ApplicationScoped
+public class OidcClientCreator {
+
+    @Inject
+    OidcClients oidcClients;
+    @ConfigProperty(name = "quarkus.oidc.auth-server-url")
+    String oidcProviderAddress;
+
+    private volatile OidcClient oidcClient;
+
+    public void startup(@Observes StartupEvent event) {
+    	createOidcClient().subscribe().with(client -> {oidcClient = client;});
+    }
+
+    public OidcClient getOidcClient() {
+        return oidcClient;
+    }
+
+    private Uni<OidcClient> createOidcClient() {
+        OidcClientConfig cfg = new OidcClientConfig();
+        cfg.setId("myclient");
+        cfg.setAuthServerUrl(oidcProviderAddress);
+        cfg.setClientId("backend-service");
+        cfg.getCredentials().setSecret("secret");
+        cfg.getGrant().setType(Type.PASSWORD);
+        cfg.setGrantOptions(Map.of("password",
+        		Map.of("username", "alice", "password", "alice")));
+        return oidcClients.newClient(cfg);
+    }
+}
+----
+
+Now, you can use this client like this:
+
+[source,java]
+----
+import org.eclipse.microprofile.rest.client.inject.RestClient;
+
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
-
-import io.quarkus.oidc.client.OidcClient;
-import io.quarkus.oidc.client.OidcClients;
-import io.quarkus.oidc.client.OidcClientConfig;
-
 import io.smallrye.mutiny.Uni;
+import io.quarkus.oidc.client.runtime.TokensHelper;
 
 @Path("/clients")
 public class OidcClientResource {
 
     @Inject
-    OidcClients clients;
+    OidcClientCreator oidcClientCreator;
+    TokensHelper tokenHelper = new TokensHelper();
+
+    @Inject
+    @RestClient
+    RestClientWithTokenHeaderParam restClient; <1>
 
     @GET
-    public String getResponse() {
-        OidcClientConfig cfg = new OidcClientConfig();
-        cfg.setId("myclient");
-        cfg.setAuthServerUrl("http://localhost:8081/auth/realms/quarkus/");
-        cfg.setClientId("quarkus");
-        cfg.getCredentials().setSecret("secret");
-        Uni<OidcClient> client = clients.newClient(cfg);
-        //Use this client to get the token
+    @Path("user-name")
+    @Produces("text/plain")
+    public Uni<String> getUserName() {
+    	return tokenHelper.getTokens(oidcClientCreator.getOidcClient()).onItem()
+        		.transformToUni(tokens -> restClient.getUserName("Bearer " + tokens.getAccessToken()));
     }
 }
 ----
+<1> See the `RestClientWithTokenHeaderParam` declaration in the <<use-oidc-client-directly>> section.
 
 [[named-oidc-clients]]
 === Inject named OidcClient and tokens
@@ -338,11 +439,14 @@ In case of multiple configured `OidcClient` objects, you can specify the `OidcCl
 
 [source,java]
 ----
-package io.quarkus.oidc.client;
+package org.acme.security.openid.connect.client;
 
+import org.eclipse.microprofile.rest.client.inject.RestClient;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
+import io.smallrye.mutiny.Uni;
+import io.quarkus.oidc.client.runtime.TokensHelper;
 
 @Path("/clients")
 public class OidcClientResource {
@@ -351,12 +455,22 @@ public class OidcClientResource {
     @NamedOidcClient("jwt-secret")
     OidcClient client;
 
+    TokensHelper tokenHelper = new TokensHelper();
+
+    @Inject
+    @RestClient
+    RestClientWithTokenHeaderParam restClient; <1>
+
     @GET
-    public String getResponse() {
-        //Use the client to get the token
+    @Path("user-name")
+    @Produces("text/plain")
+    public Uni<String> getUserName() {
+    	return tokenHelper.getTokens(client).onItem()
+        		.transformToUni(tokens -> restClient.getUserName("Bearer " + tokens.getAccessToken()));
     }
 }
 ----
+<1> See the `RestClientWithTokenHeaderParam` declaration in the <<use-oidc-client-directly>> section.
 
 The same qualifier can be used to specify the `OidcClient` used for a `Tokens` injection:
 
@@ -645,6 +759,15 @@ quarkus.oidc-client.client-id=quarkus-app
 quarkus.oidc-client.credentials.jwt.secret-provider.key=mysecret-key
 # Set it only if more than one CredentialsProvider can be registered
 quarkus.oidc-client.credentials.jwt.secret-provider.name=oidc-credentials-provider
+----
+
+`private_key_jwt` with the PEM key inlined in application.properties, and where the signature algorithm is `RS256`:
+
+[source,properties]
+----
+quarkus.oidc-client.auth-server-url=http://localhost:8180/auth/realms/quarkus/
+quarkus.oidc-client.client-id=quarkus-app
+quarkus.oidc-client.credentials.jwt.key=Base64-encoded private key representation
 ----
 
 `private_key_jwt` with the PEM key file, signature algorithm is `RS256`:
@@ -978,6 +1101,7 @@ public class OidcRequestCustomizer implements OidcRequestFilter {
 }
 ----
 
+ifndef::no-quarkus-oidc-token-propagation-reactive[]
 [[token-propagation-reactive]]
 == Token Propagation Reactive
 
@@ -1053,7 +1177,9 @@ quarkus.oidc-token-propagation.exchange-token=true
 ----
 
 `AccessTokenRequestReactiveFilter` uses a default `OidcClient` by default. A named `OidcClient` can be selected with a `quarkus.oidc-token-propagation-reactive.client-name` configuration property or with the `io.quarkus.oidc.token.propagation.AccessToken#exchangeTokenClient` annotation attribute.
+endif::no-quarkus-oidc-token-propagation-reactive[]
 
+ifndef::no-quarkus-oidc-token-propagation[]
 [[token-propagation]]
 == Token Propagation
 
@@ -1068,6 +1194,7 @@ However, the direct end-to-end Bearer token propagation should be avoided. For e
 Additionally, a complex application might need to exchange or update the tokens before propagating them. For example, the access context might be different when `Service A` is accessing `Service B`. In this case, `Service A` might be granted a narrow or completely different set of scopes to access `Service B`.
 
 The following sections show how `AccessTokenRequestFilter` and `JsonWebTokenRequestFilter` can help.
+endif::no-quarkus-oidc-token-propagation[]
 
 === RestClient AccessTokenRequestFilter
 
@@ -1209,6 +1336,7 @@ As mentioned, use `AccessTokenRequestFilter` if you work with Keycloak or an Ope
 You can generate the tokens as described in xref:security-oidc-bearer-token-authentication.adoc#integration-testing[OpenID Connect Bearer Token Integration testing] section.
 Prepare the REST test endpoints. You can have the test front-end endpoint, which uses the injected MP REST client with a registered token propagation filter, call the downstream endpoint. For example, see the `integration-tests/resteasy-client-oidc-token-propagation` in the `main` Quarkus repository.
 
+ifndef::no-quarkus-oidc-token-propagation[]
 [[reactive-token-propagation]]
 == Token Propagation Reactive
 
@@ -1226,8 +1354,10 @@ The `quarkus-rest-client-resteasy-client-oidc-token-propagation` extension provi
 
 The `quarkus-rest-client-resteasy-client-oidc-token-propagation` extension (as opposed to the non-reactive `quarkus-resteasy-client-oidc-token-propagation` extension) does not currently support the exchanging or resigning of the tokens before the propagation.
 However, these features might be added in the future.
+endif::no-quarkus-oidc-token-propagation[]
 
-[[oidc-client-graphql-client]]
+ifndef::no-quarkus-oidc-client-graphql[]
+[[quarkus-oidc-client-graphql]]
 == GraphQL client integration
 
 The `quarkus-oidc-client-graphql` extension provides a way to integrate an OIDC client into xref:smallrye-graphql-client.adoc[GraphQL clients] paralleling the approach used with REST clients.
@@ -1282,6 +1412,20 @@ Uni<String> tokenUni = oidcClients.getClient("OIDC_CLIENT_NAME")
 builder.dynamicHeader("Authorization", tokenUni);
 VertxDynamicGraphQLClient client = builder.build();
 ----
+endif::no-quarkus-oidc-client-graphql[]
+
+[[configuration-reference]]
+== Configuration reference
+
+=== OIDC client
+
+include::{generated-dir}/config/quarkus-oidc-client.adoc[opts=optional, leveloffset=+1]
+
+ifndef::no-quarkus-oidc-token-propagation-reactive[]
+=== OIDC token propagation
+
+include::{generated-dir}/config/quarkus-oidc-token-propagation-reactive.adoc[opts=optional, leveloffset=+1]
+endif::no-quarkus-oidc-token-propagation-reactive[]
 
 == References
 

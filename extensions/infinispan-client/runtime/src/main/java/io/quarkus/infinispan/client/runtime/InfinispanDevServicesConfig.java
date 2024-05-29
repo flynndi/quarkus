@@ -6,6 +6,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+import io.quarkus.runtime.annotations.ConfigDocMapKey;
 import io.quarkus.runtime.annotations.ConfigGroup;
 import io.quarkus.runtime.annotations.ConfigItem;
 
@@ -21,6 +22,15 @@ public class InfinispanDevServicesConfig {
      */
     @ConfigItem(defaultValue = "true")
     public boolean enabled;
+
+    /**
+     * When the configuration is empty, an Infinispan default client is automatically created to connect
+     * to the running dev service. However, there are scenarios where creating this client is unnecessary,
+     * yet we still need to spin up an Infinispan Server. In such cases, this property serves to determine
+     * whether the client should be created by default or not by the extension.
+     */
+    @ConfigItem(defaultValue = "true")
+    public boolean createDefaultClient;
 
     /**
      * Optional fixed port the dev service will listen to.
@@ -115,6 +125,7 @@ public class InfinispanDevServicesConfig {
      * Environment variables that are passed to the container.
      */
     @ConfigItem
+    @ConfigDocMapKey("environment-variable-name")
     public Map<String, String> containerEnv;
 
     /**

@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.jboss.resteasy.reactive.common.model.ResourceClass;
 import org.jboss.resteasy.reactive.server.core.ResteasyReactiveRequestContext;
@@ -22,6 +23,7 @@ import io.quarkus.security.spi.runtime.AuthorizationFailureEvent;
 import io.quarkus.security.spi.runtime.AuthorizationSuccessEvent;
 import io.quarkus.security.spi.runtime.MethodDescription;
 import io.quarkus.security.spi.runtime.SecurityCheck;
+import io.quarkus.vertx.http.runtime.security.QuarkusHttpUser;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.subscription.UniSubscriber;
 import io.smallrye.mutiny.subscription.UniSubscription;
@@ -40,11 +42,11 @@ public class EagerSecurityHandler implements ServerRestHandler {
 
         }
     };
-    private final boolean isProactiveAuthDisabled;
+    private final boolean onlyCheckForHttpPermissions;
     private volatile SecurityCheck check;
 
-    public EagerSecurityHandler(boolean isProactiveAuthDisabled) {
-        this.isProactiveAuthDisabled = isProactiveAuthDisabled;
+    public EagerSecurityHandler(boolean onlyCheckForHttpPermissions) {
+        this.onlyCheckForHttpPermissions = onlyCheckForHttpPermissions;
     }
 
     @Override
@@ -61,7 +63,12 @@ public class EagerSecurityHandler implements ServerRestHandler {
                 return;
             } else {
                 // only permission check
-                check = EagerSecurityContext.instance.getPermissionCheck(requestContext, null);
+                check = Uni.createFrom().deferred(new Supplier<Uni<?>>() {
+                    @Override
+                    public Uni<?> get() {
+                        return EagerSecurityContext.instance.getPermissionCheck(requestContext, null);
+                    }
+                });
             }
         } else {
             if (EagerSecurityContext.instance.doNotRunPermissionSecurityCheck) {
@@ -101,7 +108,7 @@ public class EagerSecurityHandler implements ServerRestHandler {
     }
 
     private Function<SecurityIdentity, Uni<?>> getSecurityCheck(ResteasyReactiveRequestContext requestContext) {
-        if (this.check == NULL_SENTINEL) {
+        if (this.onlyCheckForHttpPermissions || this.check == NULL_SENTINEL) {
             return null;
         }
         SecurityCheck check = this.check;
@@ -126,8 +133,18 @@ public class EagerSecurityHandler implements ServerRestHandler {
             preventRepeatedSecurityChecks(requestContext, methodDescription);
             if (EagerSecurityContext.instance.eventHelper.fireEventOnSuccess()) {
                 requestContext.requireCDIRequestScope();
-                EagerSecurityContext.instance.eventHelper.fireSuccessEvent(new AuthorizationSuccessEvent(null,
-                        check.getClass().getName(), createEventPropsWithRoutingCtx(requestContext)));
+
+                // add the identity only if authentication has already finished
+                final SecurityIdentity identity;
+                var event = requestContext.unwrap(RoutingContext.class);
+                if (event != null && event.user() instanceof QuarkusHttpUser user) {
+                    identity = user.getSecurityIdentity();
+                } else {
+                    identity = null;
+                }
+
+                EagerSecurityContext.instance.eventHelper.fireSuccessEvent(new AuthorizationSuccessEvent(identity,
+                        check.getClass().getName(), createEventPropsWithRoutingCtx(requestContext), methodDescription));
             }
             return null;
         } else {
@@ -135,7 +152,7 @@ public class EagerSecurityHandler implements ServerRestHandler {
             return new Function<SecurityIdentity, Uni<?>>() {
                 @Override
                 public Uni<?> apply(SecurityIdentity securityIdentity) {
-                    if (isProactiveAuthDisabled) {
+                    if (EagerSecurityContext.instance.isProactiveAuthDisabled) {
                         // if proactive auth is disabled, then accessing SecurityIdentity would be a blocking
                         // operation if we don't set it; this will allow to access the identity without blocking
                         // from secured endpoints
@@ -150,7 +167,8 @@ public class EagerSecurityHandler implements ServerRestHandler {
                             if (EagerSecurityContext.instance.eventHelper.fireEventOnFailure()) {
                                 EagerSecurityContext.instance.eventHelper
                                         .fireFailureEvent(new AuthorizationFailureEvent(securityIdentity, unauthorizedException,
-                                                theCheck.getClass().getName(), createEventPropsWithRoutingCtx(requestContext)));
+                                                theCheck.getClass().getName(), createEventPropsWithRoutingCtx(requestContext),
+                                                methodDescription));
                             }
                             throw unauthorizedException;
                         }
@@ -169,7 +187,7 @@ public class EagerSecurityHandler implements ServerRestHandler {
                                             EagerSecurityContext.instance.eventHelper
                                                     .fireFailureEvent(new AuthorizationFailureEvent(
                                                             securityIdentity, throwable, theCheck.getClass().getName(),
-                                                            createEventPropsWithRoutingCtx(requestContext)));
+                                                            createEventPropsWithRoutingCtx(requestContext), methodDescription));
                                         }
                                     });
                         }
@@ -181,7 +199,7 @@ public class EagerSecurityHandler implements ServerRestHandler {
                                             EagerSecurityContext.instance.eventHelper.fireSuccessEvent(
                                                     new AuthorizationSuccessEvent(securityIdentity,
                                                             theCheck.getClass().getName(),
-                                                            createEventPropsWithRoutingCtx(requestContext)));
+                                                            createEventPropsWithRoutingCtx(requestContext), methodDescription));
                                         }
                                     });
                         }
@@ -217,34 +235,35 @@ public class EagerSecurityHandler implements ServerRestHandler {
 
     public static abstract class Customizer implements HandlerChainCustomizer {
 
-        public static HandlerChainCustomizer newInstance(boolean isProactiveAuthEnabled) {
-            return isProactiveAuthEnabled ? new ProactiveAuthEnabledCustomizer() : new ProactiveAuthDisabledCustomizer();
+        public static HandlerChainCustomizer newInstance(boolean onlyCheckForHttpPermissions) {
+            return onlyCheckForHttpPermissions ? new HttpPermissionsOnlyCustomizer()
+                    : new HttpPermissionsAndSecurityChecksCustomizer();
         }
-
-        protected abstract boolean isProactiveAuthDisabled();
 
         @Override
         public List<ServerRestHandler> handlers(Phase phase, ResourceClass resourceClass,
                 ServerResourceMethod serverResourceMethod) {
             if (phase == Phase.AFTER_MATCH) {
-                return Collections.singletonList(new EagerSecurityHandler(isProactiveAuthDisabled()));
+                return Collections.singletonList(new EagerSecurityHandler(onlyCheckForHttpPermissions()));
             }
             return Collections.emptyList();
         }
 
-        public static class ProactiveAuthEnabledCustomizer extends Customizer {
+        protected abstract boolean onlyCheckForHttpPermissions();
+
+        public static final class HttpPermissionsOnlyCustomizer extends Customizer {
 
             @Override
-            protected boolean isProactiveAuthDisabled() {
-                return false;
+            protected boolean onlyCheckForHttpPermissions() {
+                return true;
             }
         }
 
-        public static class ProactiveAuthDisabledCustomizer extends Customizer {
+        public static final class HttpPermissionsAndSecurityChecksCustomizer extends Customizer {
 
             @Override
-            protected boolean isProactiveAuthDisabled() {
-                return true;
+            protected boolean onlyCheckForHttpPermissions() {
+                return false;
             }
         }
 

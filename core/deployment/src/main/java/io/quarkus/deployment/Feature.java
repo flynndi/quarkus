@@ -37,6 +37,7 @@ public enum Feature {
     HIBERNATE_REACTIVE_PANACHE_KOTLIN,
     HIBERNATE_REACTIVE_REST_DATA_PANACHE,
     HIBERNATE_SEARCH_ELASTICSEARCH,
+    HIBERNATE_SEARCH_STANDALONE_ELASTICSEARCH,
     HIBERNATE_VALIDATOR,
     INFINISPAN_CLIENT,
     INFINISPAN_EMBEDDED,
@@ -68,6 +69,7 @@ public enum Feature {
     NARAYANA_LRA,
     NARAYANA_STM,
     NEO4J,
+    OBSERVABILITY,
     OIDC,
     OIDC_CLIENT,
     RESTEASY_CLIENT_OIDC_FILTER,
@@ -156,7 +158,7 @@ public enum Feature {
     VAULT,
     VERTX,
     VERTX_GRAPHQL,
-    WEBJARS_LOCATOR;
+    WEB_DEPENDENCY_LOCATOR;
 
     public String getName() {
         return toString().toLowerCase().replace('_', '-');

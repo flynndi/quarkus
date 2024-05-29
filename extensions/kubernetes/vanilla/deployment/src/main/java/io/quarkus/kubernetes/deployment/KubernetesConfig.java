@@ -14,6 +14,7 @@ import io.dekorate.kubernetes.config.DeploymentStrategy;
 import io.quarkus.deployment.Capabilities;
 import io.quarkus.deployment.Capability;
 import io.quarkus.kubernetes.spi.DeployStrategy;
+import io.quarkus.runtime.annotations.ConfigDocMapKey;
 import io.quarkus.runtime.annotations.ConfigItem;
 import io.quarkus.runtime.annotations.ConfigRoot;
 
@@ -61,12 +62,14 @@ public class KubernetesConfig implements PlatformConfiguration {
      * Custom labels to add to all resources
      */
     @ConfigItem
+    @ConfigDocMapKey("label-name")
     Map<String, String> labels;
 
     /**
      * Custom annotations to add to all resources
      */
     @ConfigItem
+    @ConfigDocMapKey("annotation-name")
     Map<String, String> annotations;
 
     /**
@@ -382,6 +385,12 @@ public class KubernetesConfig implements PlatformConfiguration {
     boolean idempotent;
 
     /**
+     * VCS URI annotation configuration.
+     */
+    @ConfigItem
+    VCSUriConfig vcsUri;
+
+    /**
      * Optionally set directory generated kubernetes resources will be written to. Default is `target/kubernetes`.
      */
     @ConfigItem
@@ -598,6 +607,11 @@ public class KubernetesConfig implements PlatformConfiguration {
     @Override
     public boolean isIdempotent() {
         return idempotent;
+    }
+
+    @Override
+    public VCSUriConfig getVCSUri() {
+        return vcsUri;
     }
 
     public DeployStrategy getDeployStrategy() {

@@ -1,5 +1,7 @@
 package io.quarkus.test.component;
 
+import static io.quarkus.commons.classloading.ClassloadHelper.fromClassNameToResourceName;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -11,6 +13,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -630,12 +633,12 @@ public class QuarkusComponentTestExtension
 
             extensionContext.getRoot().getStore(NAMESPACE).put(KEY_GENERATED_RESOURCES, generatedResources);
 
-            builder.addAnnotationTransformer(AnnotationsTransformer.appliedToField().whenContainsAny(qualifiers)
+            builder.addAnnotationTransformation(AnnotationsTransformer.appliedToField().whenContainsAny(qualifiers)
                     .whenContainsNone(DotName.createSimple(Inject.class)).thenTransform(t -> t.add(Inject.class)));
 
-            builder.addAnnotationTransformer(new JaxrsSingletonTransformer());
+            builder.addAnnotationTransformation(new JaxrsSingletonTransformer());
             for (AnnotationsTransformer transformer : configuration.annotationsTransformers) {
-                builder.addAnnotationTransformer(transformer);
+                builder.addAnnotationTransformation(transformer);
             }
 
             // Register:
@@ -1195,13 +1198,20 @@ public class QuarkusComponentTestExtension
         if (outputDirectory != null) {
             testOutputDirectory = new File(outputDirectory);
         } else {
+            // All below string transformations work with _URL encoded_ paths, where e.g.
+            // a space is replaced with %20. At the end, we feed this back to URI.create
+            // to make sure the encoding is dealt with properly, so we don't have to do this
+            // ourselves. Directly passing a URL-encoded string to the File() constructor
+            // does not work properly.
+
             // org.acme.Foo -> org/acme/Foo.class
-            String testClassResourceName = testClass.getName().replace('.', '/') + ".class";
-            // org/acme/Foo.class -> /some/path/to/project/target/test-classes/org/acme/Foo.class
-            String testPath = testClass.getClassLoader().getResource(testClassResourceName).getFile();
-            // /some/path/to/project/target/test-classes/org/acme/Foo.class -> /some/path/to/project/target/test-classes
-            String testClassesRootPath = testPath.substring(0, testPath.length() - testClassResourceName.length());
-            testOutputDirectory = new File(testClassesRootPath);
+            String testClassResourceName = fromClassNameToResourceName(testClass.getName());
+            // org/acme/Foo.class -> file:/some/path/to/project/target/test-classes/org/acme/Foo.class
+            String testPath = testClass.getClassLoader().getResource(testClassResourceName).toString();
+            // file:/some/path/to/project/target/test-classes/org/acme/Foo.class -> file:/some/path/to/project/target/test-classes
+            String testClassesRootPath = testPath.substring(0, testPath.length() - testClassResourceName.length() - 1);
+            // resolve back to File instance
+            testOutputDirectory = new File(URI.create(testClassesRootPath));
         }
         if (!testOutputDirectory.canWrite()) {
             throw new IllegalStateException("Invalid test output directory: " + testOutputDirectory);

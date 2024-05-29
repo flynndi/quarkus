@@ -41,8 +41,8 @@
         <version.compiler.plugin>3.12.1</version.compiler.plugin>
         <version.enforcer.plugin>3.2.1</version.enforcer.plugin>
         <version.surefire.plugin>3.2.5</version.surefire.plugin>
-        <jackson-bom.version>2.16.1</jackson-bom.version>
-        <smallrye-beanbag.version>1.4.0</smallrye-beanbag.version>
+        <jackson-bom.version>2.17.1</jackson-bom.version>
+        <smallrye-beanbag.version>1.4.1</smallrye-beanbag.version>
         <junit.jupiter.version>5.10.2</junit.jupiter.version>
     </properties>
     <build>
@@ -153,7 +153,7 @@
                 <plugin>
                     <groupId>net.revelc.code</groupId>
                     <artifactId>impsort-maven-plugin</artifactId>
-                    <version>1.9.0</version>
+                    <version>1.10.0</version>
                     <configuration>
                         <!-- store outside of target to speed up formatting when mvn clean is used -->
                         <cachedir>.cache/impsort-maven-plugin-${impsort-maven-plugin.version}</cachedir>
@@ -391,7 +391,7 @@
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
-            <version>5.10.0</version>
+            <version>5.12.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>

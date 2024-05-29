@@ -43,7 +43,7 @@ public class AbstractPathMatchingHttpSecurityPolicy {
     public AbstractPathMatchingHttpSecurityPolicy(Map<String, PolicyMappingConfig> permissions,
             Map<String, PolicyConfig> rolePolicy, String rootPath, Instance<HttpSecurityPolicy> installedPolicies,
             PolicyMappingConfig.AppliesTo appliesTo) {
-        boolean hasNoPermissions = permissions.isEmpty();
+        boolean hasNoPermissions = true;
         var namedHttpSecurityPolicies = toNamedHttpSecPolicies(rolePolicy, installedPolicies);
         List<ImmutablePathMatcher<List<HttpMatcher>>> sharedPermsMatchers = new ArrayList<>();
         final var builder = ImmutablePathMatcher.<List<HttpMatcher>> builder().handlerAccumulator(List::addAll)
@@ -116,7 +116,11 @@ public class AbstractPathMatchingHttpSecurityPolicy {
                     @Override
                     public Uni<? extends CheckResult> apply(CheckResult checkResult) {
                         if (!checkResult.isPermitted()) {
-                            return Uni.createFrom().item(CheckResult.DENY);
+                            if (checkResult.getAugmentedIdentity() == null) {
+                                return Uni.createFrom().item(CheckResult.DENY);
+                            } else {
+                                return Uni.createFrom().item(new CheckResult(false, checkResult.getAugmentedIdentity()));
+                            }
                         } else {
                             if (checkResult.getAugmentedIdentity() != null) {
 

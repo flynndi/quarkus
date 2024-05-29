@@ -36,6 +36,7 @@
         <module>quartz-virtual-threads</module>
         <module>virtual-threads-disabled</module>
         <module>reactive-routes-virtual-threads</module>
+        <module>security-webauthn-virtual-threads</module>
     </modules>
 
     <build>
@@ -237,7 +238,7 @@
                 </file>
             </activation>
             <properties>
-                <quarkus.package.type>native</quarkus.package.type>
+                <quarkus.native.enabled>true</quarkus.native.enabled>
             </properties>
             <build>
                 <pluginManagement>

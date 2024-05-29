@@ -6,6 +6,7 @@ import static com.google.cloud.tools.jib.api.buildplan.FilePermissions.DEFAULT_F
 import static io.quarkus.container.image.deployment.util.EnablementUtil.buildContainerImageNeeded;
 import static io.quarkus.container.image.deployment.util.EnablementUtil.pushContainerImageNeeded;
 import static io.quarkus.container.util.PathsUtil.findMainSourcesRoot;
+import static io.quarkus.deployment.pkg.PackageConfig.JarConfig.JarType.*;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -83,6 +84,7 @@ import io.quarkus.deployment.pkg.steps.NativeBuild;
 import io.quarkus.deployment.util.ContainerRuntimeUtil;
 import io.quarkus.fs.util.ZipUtils;
 import io.quarkus.maven.dependency.ResolvedDependency;
+import io.quarkus.runtime.ResettableSystemProperties;
 
 public class JibProcessor {
 
@@ -151,6 +153,7 @@ public class JibProcessor {
         return JAVA_17_BASE_IMAGE;
     }
 
+    @SuppressWarnings("deprecation") // legacy JAR
     @BuildStep(onlyIf = { IsNormal.class, JibBuild.class }, onlyIfNot = NativeBuild.class)
     public void buildFromJar(ContainerImageConfig containerImageConfig, ContainerImageJibConfig jibConfig,
             PackageConfig packageConfig,
@@ -175,20 +178,20 @@ public class JibProcessor {
         }
 
         JibContainerBuilder jibContainerBuilder;
-        String packageType = packageConfig.type;
-        if (packageConfig.isLegacyJar() || packageType.equalsIgnoreCase(PackageConfig.BuiltInType.UBER_JAR.getValue())
+        PackageConfig.JarConfig.JarType jarType = packageConfig.jar().type();
+        if (jarType == LEGACY_JAR || jarType == UBER_JAR
                 || !uberJarRequired.isEmpty()) {
             jibContainerBuilder = createContainerBuilderFromLegacyJar(determineBaseJvmImage(jibConfig, compiledJavaVersion),
                     jibConfig, containerImageConfig,
                     sourceJar, outputTarget, mainClass, containerImageLabels);
-        } else if (packageConfig.isFastJar()) {
+        } else if (jarType == FAST_JAR || jarType == MUTABLE_JAR) {
             jibContainerBuilder = createContainerBuilderFromFastJar(determineBaseJvmImage(jibConfig, compiledJavaVersion),
                     jibConfig, containerImageConfig, sourceJar, curateOutcome,
                     containerImageLabels,
-                    appCDSResult, packageType.equals(PackageConfig.BuiltInType.MUTABLE_JAR.getValue()));
+                    appCDSResult, jarType == MUTABLE_JAR);
         } else {
             throw new IllegalArgumentException(
-                    "Package type '" + packageType + "' is not supported by the container-image-jib extension");
+                    "JAR type '" + jarType + "' is not supported by the container-image-jib extension");
         }
         setUser(jibConfig, jibContainerBuilder);
         setPlatforms(jibConfig, jibContainerBuilder);
@@ -253,15 +256,13 @@ public class JibProcessor {
         for (String additionalTag : containerImage.getAdditionalTags()) {
             containerizer.withAdditionalTag(additionalTag);
         }
-        String previousContextStorageSysProp = null;
-        try {
-            // Jib uses the Google HTTP Client under the hood which attempts to record traces via OpenCensus which is wired
-            // to delegate to OpenTelemetry.
-            // This can lead to problems with the Quarkus OpenTelemetry extension which expects Vert.x to be running,
-            // something that is not the case at build time, see https://github.com/quarkusio/quarkus/issues/22864.
-            previousContextStorageSysProp = System.setProperty(OPENTELEMETRY_CONTEXT_CONTEXT_STORAGE_PROVIDER_SYS_PROP,
-                    "default");
 
+        // Jib uses the Google HTTP Client under the hood which attempts to record traces via OpenCensus which is wired
+        // to delegate to OpenTelemetry.
+        // This can lead to problems with the Quarkus OpenTelemetry extension which expects Vert.x to be running,
+        // something that is not the case at build time, see https://github.com/quarkusio/quarkus/issues/22864.
+        try (var resettableSystemProperties = ResettableSystemProperties
+                .of(OPENTELEMETRY_CONTEXT_CONTEXT_STORAGE_PROVIDER_SYS_PROP, "default")) {
             JibContainer container = containerizeUnderLock(jibContainerBuilder, containerizer);
             log.infof("%s container image %s (%s)\n",
                     containerImageConfig.isPushExplicitlyEnabled() ? "Pushed" : "Created",
@@ -270,12 +271,6 @@ public class JibProcessor {
             return container;
         } catch (Exception e) {
             throw new RuntimeException("Unable to create container image", e);
-        } finally {
-            if (previousContextStorageSysProp == null) {
-                System.clearProperty(OPENTELEMETRY_CONTEXT_CONTEXT_STORAGE_PROVIDER_SYS_PROP);
-            } else {
-                System.setProperty(OPENTELEMETRY_CONTEXT_CONTEXT_STORAGE_PROVIDER_SYS_PROP, previousContextStorageSysProp);
-            }
         }
     }
 

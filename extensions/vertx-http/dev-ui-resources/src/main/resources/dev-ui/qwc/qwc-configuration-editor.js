@@ -2,8 +2,9 @@ import { LitElement, html, css } from 'lit';
 import { JsonRpc } from 'jsonrpc';
 import { notifier } from 'notifier';
 import { observeState } from 'lit-element-state';
+import { devuiState } from 'devui-state';
 import { themeState } from 'theme-state';
-import '@quarkus-webcomponents/codeblock';
+import '@qomponent/qui-code-block';
 import '@vaadin/button';
 import '@vaadin/icon';
 import '@vaadin/progress-bar';
@@ -110,6 +111,7 @@ export class QwcConfigurationEditor extends observeState(LitElement) {
             if(jsonRpcResponse.result === false){
                 notifier.showErrorMessage("Configuration failed to update. See log file for details");
             }else{
+                fetch(devuiState.applicationInfo.contextRoot);
                 notifier.showSuccessMessage("Configuration successfully updated");
             }
         });

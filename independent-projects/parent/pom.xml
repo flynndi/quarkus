@@ -17,7 +17,7 @@
 
     <properties>
         <!-- Plugin versions (please keep in alphabetical order) -->
-        <version.buildhelper.plugin>3.5.0</version.buildhelper.plugin>
+        <version.buildhelper.plugin>3.6.0</version.buildhelper.plugin>
         <version.buildnumber.plugin>3.0.0</version.buildnumber.plugin>
         <version.clean.plugin>3.2.0</version.clean.plugin>
         <version.compiler.plugin>3.12.1</version.compiler.plugin>
@@ -27,7 +27,7 @@
         <version.exec.plugin>3.1.0</version.exec.plugin>
         <version.formatter.plugin>2.23.0</version.formatter.plugin>
         <version.gpg.plugin>3.0.1</version.gpg.plugin>
-        <version.impsort.plugin>1.9.0</version.impsort.plugin>
+        <version.impsort.plugin>1.10.0</version.impsort.plugin>
         <version.install.plugin>3.1.1</version.install.plugin>
         <version.javadoc.plugin>3.5.0</version.javadoc.plugin>
         <version.jar.plugin>3.3.0</version.jar.plugin>
@@ -278,6 +278,7 @@
                                 <Implementation-URL>${project.url}</Implementation-URL>
                                 <Scm-Url>${project.scm.url}</Scm-Url>
                                 <Scm-Connection>${project.scm.connection}</Scm-Connection>
+                                <Bundle-License>Apache License 2.0</Bundle-License>
                             </manifestEntries>
                         </archive>
                     </configuration>
@@ -450,6 +451,31 @@
             <id>release</id>
             <build>
                 <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-resources-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>copy-license</id>
+                                <phase>generate-resources</phase>
+                                <goals>
+                                    <goal>copy-resources</goal>
+                                </goals>
+                                <configuration>
+                                    <outputDirectory>${project.build.directory}/classes/META-INF</outputDirectory>
+                                    <resources>
+                                        <resource>
+                                            <directory>${maven.multiModuleProjectDirectory}</directory>
+                                            <filtering>false</filtering>
+                                            <includes>
+                                                <include>LICENSE</include>
+                                            </includes>
+                                        </resource>
+                                    </resources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
                     <plugin>
                         <!--
                         ## IMPORTANT ##

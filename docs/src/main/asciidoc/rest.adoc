@@ -88,8 +88,8 @@ Resource:: Represents your domain object. This is what your API serves and modif
 Representation:: How your resource is represented on the wire, can vary depending on content types
 Content type:: Designates a particular representation (also called a media type), for example `text/plain` or `application/json`
 HTTP:: Underlying wire protocol for routing REST calls (see https://tools.ietf.org/html/rfc7230[HTTP specifications])
-HTTP request:: the request part of the HTTP call, consisting of an HTTP method, a target URI, headers and an optional message body
-HTTP response:: the response part of the HTTP call, consisting of an HTTP response status, headers and an optional message body
+HTTP request:: The request part of the HTTP call, consisting of an HTTP method, a target URI, headers and an optional message body
+HTTP response:: The response part of the HTTP call, consisting of an HTTP response status, headers and an optional message body
 
 === Declaring endpoints: URI mapping
 
@@ -1458,8 +1458,12 @@ A very simple Jakarta REST Resource that uses `Person` could be:
 ----
 package org.acme.rest;
 
+import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON;
+
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.Response;
 
 @Path("person")
 public class Person {
@@ -1469,8 +1473,25 @@ public class Person {
     public Person getPerson(Long id) {
         return new Person(id, "foo", "bar", "Brick Lane");
     }
+
+    @Produces(APPLICATION_JSON) <1>
+    @Path("/friend/{id}")
+    @GET
+    public Response getPersonFriend(Long id) {
+        var person = new Person(id, "foo", "bar", "Brick Lane");
+        return Response.ok(person).build();
+    }
 }
 ----
+<1> The `@SecureField` annotation is only effective when Quarkus recognizes that produced content type is the 'application/json' type.
+
+WARNING: Currently you cannot use the `@SecureField` annotation to secure your data returned from resource methods returning the `io.smallrye.mutiny.Multi` reactive type.
+
+[IMPORTANT]
+====
+All resource methods returning data secured with the `@SecureField` annotation should be tested.
+Please make sure data are secured as you intended.
+====
 
 Assuming security has been set up for the application (see our xref:security-overview.adoc[guide] for more details), when a user with the `admin` role
 performs an HTTP GET on `/person/1` they will receive:
@@ -2242,8 +2263,16 @@ public class Endpoint {
 }
 ----
 
-NOTE: exception mappers defined in REST endpoint classes will only be called if the
-exception is thrown in the same class. If you want to define global exception mappers,
+[TIP]
+====
+By default, methods annotated with `@ServerExceptionMapper` do **not** run CDI interceptors that apply to the other methods of the class (like ones needed for implementing security method level security).
+
+Users however can opt into interceptors by adding the corresponding annotations to the method.
+====
+
+[NOTE]
+====
+Εxception mappers defined in REST endpoint classes will only be called if the  exception is thrown in the same class. If you want to define global exception mappers,
 simply define them outside a REST endpoint class:
 
 [source,java]
@@ -2262,6 +2291,7 @@ class ExceptionMappers {
 ----
 
 You can also declare link:{jaxrsspec}#exceptionmapper[exception mappers in the Jakarta REST way].
+====
 
 Your exception mapper may declare any of the following parameter types:
 
@@ -2310,9 +2340,9 @@ quarkus.log.category."org.jboss.resteasy.reactive.common.core.AbstractResteasyRe
 
 ==== Via annotations
 
-You can declare functions which are invoked in the following phases of the request processing:
+You can declare functions that are invoked in the following phases of the request processing:
 
-- Before the endpoint method is identified: pre-routing request filter
+- Before the endpoint method is identified: pre-matching request filter
 - After routing, but before the endpoint method is called: normal request filter
 - After the endpoint method is called: response filter
 
@@ -2341,7 +2371,7 @@ class Filters {
     @ServerRequestFilter
     public Optional<RestResponse<Void>> getFilter(ContainerRequestContext ctx) {
         // only allow GET methods for now
-        if(ctx.getMethod().equals(HttpMethod.GET)) {
+        if(!ctx.getMethod().equals(HttpMethod.GET)) {
             return Optional.of(RestResponse.status(Response.Status.METHOD_NOT_ALLOWED));
         }
         return Optional.empty();
@@ -2491,7 +2521,7 @@ A `ContainerResponseFilter` will also be called for <<exception-mapping, handled
 
 [[readers-writers]]
 
-Whenever your endpoint methods return an object (of when they return a
+Whenever your endpoint methods return an object (or when they return a
 link:{resteasy-reactive-common-api}/org/jboss/resteasy/reactive/RestResponse.html[`RestResponse<?>`]
 or link:{jaxrsapi}/jakarta/ws/rs/core/Response.html[`Response`] with
 an entity), Quarkus REST will look for a way to map that into an HTTP response body.
@@ -2599,7 +2629,7 @@ public class CheeseBodyHandler implements MessageBodyReader<Cheese>,
 }
 ----
 
-If you want to get the most performance our of your writer, you can extend the
+If you want to get the most performance out of your writer, you can extend the
 link:{resteasy-reactive-api}/org/jboss/resteasy/reactive/server/spi/ServerMessageBodyWriter.html[`ServerMessageBodyWriter`]
 instead of link:{jaxrsapi}/jakarta/ws/rs/ext/MessageBodyWriter.html[`MessageBodyWriter`]
 where you will be able to use less reflection and bypass the blocking IO layer:

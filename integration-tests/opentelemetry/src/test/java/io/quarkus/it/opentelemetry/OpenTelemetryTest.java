@@ -27,7 +27,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -38,6 +40,7 @@ import io.opentelemetry.api.trace.SpanKind;
 import io.opentelemetry.api.trace.TraceId;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.context.propagation.TextMapSetter;
+import io.opentelemetry.semconv.SemanticAttributes;
 import io.quarkus.it.opentelemetry.util.SocketClient;
 import io.quarkus.test.common.http.TestHTTPResource;
 import io.quarkus.test.junit.QuarkusTest;
@@ -140,7 +143,7 @@ public class OpenTelemetryTest {
         Map<String, Object> client = getSpanByKindAndParentId(spans, CLIENT, server.get("spanId"));
         assertEquals(CLIENT.toString(), client.get("kind"));
         verifyResource(client);
-        assertEquals("GET", client.get("name"));
+        assertEquals("GET /", client.get("name"));
         assertEquals(SpanKind.CLIENT.toString(), client.get("kind"));
         assertTrue((Boolean) client.get("ended"));
         assertTrue((Boolean) client.get("parent_valid"));
@@ -206,7 +209,7 @@ public class OpenTelemetryTest {
 
         Map<String, Object> client = getSpanByKindAndParentId(spans, CLIENT, server.get("spanId"));
         assertEquals(CLIENT.toString(), client.get("kind"));
-        assertEquals("GET", client.get("name"));
+        assertEquals("GET /", client.get("name"));
         assertEquals(SpanKind.CLIENT.toString(), client.get("kind"));
         assertTrue((Boolean) client.get("ended"));
         assertTrue((Boolean) client.get("parent_valid"));
@@ -261,7 +264,7 @@ public class OpenTelemetryTest {
 
         Map<String, Object> client = getSpanByKindAndParentId(spans, CLIENT, server.get("spanId"));
         assertEquals(CLIENT.toString(), client.get("kind"));
-        assertEquals("GET", client.get("name"));
+        assertEquals("GET /from-baggage", client.get("name"));
         assertEquals("http://localhost:8081/from-baggage", client.get("attr_http.url"));
         assertEquals("200", client.get("attr_http.status_code"));
         assertEquals(client.get("parentSpanId"), server.get("spanId"));
@@ -467,7 +470,7 @@ public class OpenTelemetryTest {
         assertNotNull(server.get("attr_user_agent.original"));
 
         Map<String, Object> client = getSpanByKindAndParentId(spans, CLIENT, server.get("spanId"));
-        assertEquals("GET", client.get("name"));
+        assertEquals("GET /client/pong/{message}", client.get("name"));
         assertEquals(SpanKind.CLIENT.toString(), client.get("kind"));
         assertTrue((Boolean) client.get("ended"));
         assertTrue((Boolean) client.get("parent_valid"));
@@ -530,7 +533,7 @@ public class OpenTelemetryTest {
         assertNotNull(server.get("attr_user_agent.original"));
 
         Map<String, Object> client = getSpanByKindAndParentId(spans, CLIENT, server.get("spanId"));
-        assertEquals("GET", client.get("name"));
+        assertEquals("GET /client/pong/{message}", client.get("name"));
         assertEquals(SpanKind.CLIENT.toString(), client.get("kind"));
         assertTrue((Boolean) client.get("ended"));
         assertTrue((Boolean) client.get("parent_valid"));
@@ -602,7 +605,7 @@ public class OpenTelemetryTest {
         assertEquals("one", fromInterceptor.get("attr_message"));
 
         Map<String, Object> client = getSpanByKindAndParentId(spans, CLIENT, fromInterceptor.get("spanId"));
-        assertEquals("GET", client.get("name"));
+        assertEquals("GET /client/pong/{message}", client.get("name"));
         assertEquals(SpanKind.CLIENT.toString(), client.get("kind"));
         assertTrue((Boolean) client.get("ended"));
         assertTrue((Boolean) client.get("parent_valid"));
@@ -703,6 +706,34 @@ public class OpenTelemetryTest {
             fail("Not failing graciously. Got: " + e.getMessage());
         }
         await().atMost(5, TimeUnit.SECONDS).until(() -> getSpans().size() == 1);
+    }
+
+    /**
+     * Test no End User attributes are added when the feature is disabled.
+     */
+    @Test
+    public void testNoEndUserAttributes() {
+        RestAssured
+                .given()
+                .auth().preemptive().basic("stuart", "writer")
+                .get("/otel/enduser/roles-allowed-only-writer-role")
+                .then()
+                .statusCode(200)
+                .body(Matchers.is("/roles-allowed-only-writer-role"));
+        RestAssured
+                .given()
+                .auth().preemptive().basic("scott", "reader")
+                .get("/otel/enduser/roles-allowed-only-writer-role")
+                .then()
+                .statusCode(403);
+        await().atMost(5, TimeUnit.SECONDS).until(() -> getSpans().size() > 1);
+        List<Map<String, Object>> spans = getSpans();
+        Assertions.assertTrue(spans
+                .stream()
+                .flatMap(m -> m.entrySet().stream())
+                .filter(e -> ("attr_" + SemanticAttributes.ENDUSER_ID.getKey()).equals(e.getKey())
+                        || ("attr_" + SemanticAttributes.ENDUSER_ROLE.getKey()).equals(e.getKey()))
+                .findAny().isEmpty());
     }
 
     private void verifyResource(Map<String, Object> spanData) {

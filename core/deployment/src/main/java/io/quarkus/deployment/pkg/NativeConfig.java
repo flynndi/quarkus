@@ -24,6 +24,18 @@ public interface NativeConfig {
     String DEFAULT_MANDREL_BUILDER_IMAGE = "quay.io/quarkus/ubi-quarkus-mandrel-builder-image:jdk-21";
 
     /**
+     * Set to enable native-image building using GraalVM.
+     */
+    @WithDefault("false")
+    boolean enabled();
+
+    /**
+     * Set to prevent the native-image process from actually building the native image.
+     */
+    @WithDefault("false")
+    boolean sourcesOnly();
+
+    /**
      * Comma-separated, additional arguments to pass to the build process.
      * If an argument includes the {@code ,} symbol, it needs to be escaped, e.g. {@code \\,}
      */
@@ -206,6 +218,14 @@ public interface NativeConfig {
      * so this option enables the generation of such native executables.
      */
     Optional<Boolean> pie();
+
+    /**
+     * Generate instructions for a specific machine type. Defaults to {@code x86-64-v3} on AMD64 and {@code armv8-a} on AArch64.
+     * Use {@code compatibility} for best compatibility, or {@code native} for best performance if a native executable is
+     * deployed on the same machine or on a machine with the same CPU features.
+     * A list of all available machine types is available by executing {@code native-image -march=list}
+     */
+    Optional<String> march();
 
     /**
      * If this build is done using a remote docker daemon.

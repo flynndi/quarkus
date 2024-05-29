@@ -11,20 +11,24 @@ import static org.junit.jupiter.api.Assertions.fail;
 import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.SortedMap;
+import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 
+import org.htmlunit.CookieManager;
+import org.htmlunit.FailingHttpStatusCodeException;
+import org.htmlunit.SilentCssErrorHandler;
+import org.htmlunit.WebClient;
+import org.htmlunit.WebRequest;
+import org.htmlunit.WebResponse;
+import org.htmlunit.html.HtmlForm;
+import org.htmlunit.html.HtmlPage;
+import org.htmlunit.util.Cookie;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-
-import com.gargoylesoftware.htmlunit.FailingHttpStatusCodeException;
-import com.gargoylesoftware.htmlunit.SilentCssErrorHandler;
-import com.gargoylesoftware.htmlunit.WebClient;
-import com.gargoylesoftware.htmlunit.WebRequest;
-import com.gargoylesoftware.htmlunit.WebResponse;
-import com.gargoylesoftware.htmlunit.html.HtmlForm;
-import com.gargoylesoftware.htmlunit.html.HtmlPage;
-import com.gargoylesoftware.htmlunit.util.Cookie;
 
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
@@ -295,6 +299,7 @@ public class BearerTokenAuthorizationTest {
             loginForm.getInputByName("password").setValueAttribute("alice");
             page = loginForm.getInputByName("login").click();
             assertEquals("tenant-web-app:alice:reauthenticated", page.getBody().asNormalizedText());
+            assertNotNull(getSessionCookie(webClient, "tenant-web-app"));
             // tenant-web-app2
             page = webClient.getPage("http://localhost:8081/tenant/tenant-web-app2/api/user/webapp2");
             assertNull(getStateCookieSavedPath(webClient, "tenant-web-app2"));
@@ -304,7 +309,10 @@ public class BearerTokenAuthorizationTest {
             loginForm.getInputByName("password").setValueAttribute("alice");
             page = loginForm.getInputByName("login").click();
             assertEquals("tenant-web-app2:alice", page.getBody().asNormalizedText());
-
+            assertNull(getSessionCookie(webClient, "tenant-web-app"));
+            List<Cookie> sessionCookieChunks = getSessionCookies(webClient, "tenant-web-app2");
+            assertNotNull(sessionCookieChunks);
+            assertEquals(2, sessionCookieChunks.size());
             webClient.getCookieManager().clearCookies();
         }
     }
@@ -655,6 +663,39 @@ public class BearerTokenAuthorizationTest {
     }
 
     @Test
+    public void testBothGlobalAndTenantSpecificJwtValidator() {
+        RestAssured.given().auth().oauth2(getAccessToken("alice", "b", "b"))
+                .when().get("/tenant/tenant-requiredclaim/api/user")
+                .then()
+                .statusCode(200);
+        RestAssured.given().auth().oauth2(getAccessToken("jdoe", "b", "b"))
+                .when().get("/tenant/tenant-requiredclaim/api/user")
+                .then()
+                .statusCode(401);
+        RestAssured.given().auth().oauth2(getAccessToken("admin", "b", "b"))
+                .when().get("/tenant/tenant-requiredclaim/api/user")
+                .then()
+                .statusCode(401);
+    }
+
+    @Test
+    public void testGlobalJwtValidator() {
+        // tests that tenant-specific validator is not applied as the @TenantFeature value is not matched
+        RestAssured.given().auth().oauth2(getAccessToken("alice", "b", "b"))
+                .when().get("/tenant/tenant-requiredclaim-alternative/api/user")
+                .then()
+                .statusCode(200);
+        RestAssured.given().auth().oauth2(getAccessToken("jdoe", "b", "b"))
+                .when().get("/tenant/tenant-requiredclaim-alternative/api/user")
+                .then()
+                .statusCode(401);
+        RestAssured.given().auth().oauth2(getAccessToken("admin", "b", "b"))
+                .when().get("/tenant/tenant-requiredclaim-alternative/api/user")
+                .then()
+                .statusCode(200);
+    }
+
+    @Test
     public void testRequiredClaimPass() {
         //Client id should match the required azp claim
         RestAssured.given().auth().oauth2(getAccessToken("alice", "b", "b"))
@@ -745,6 +786,12 @@ public class BearerTokenAuthorizationTest {
         }
     }
 
+    @Test
+    public void testResolveTenantsByIssuer() {
+        assertStaticTenantSuccess("e", "tenant-e", "tenant-by-issuer");
+        assertStaticTenantSuccess("f", "tenant-f", "tenant-by-issuer");
+    }
+
     private void assertStaticTenantSuccess(String clientId, String tenant, String subPath) {
         // tenant is resolved based on path pattern and access token is valid
         final String accessToken = getAccessToken(clientId);
@@ -766,6 +813,49 @@ public class BearerTokenAuthorizationTest {
         // tenant is not resolved based on path pattern or access token is not valid
         final String accessToken = getAccessToken(clientId);
         RestAssured.given().auth().oauth2(accessToken).when().get("/api/tenant-paths/" + subPath).then().statusCode(401);
+    }
+
+    @Test
+    public void testAnnotationBasedAuthMechSelection() throws IOException {
+        // endpoint is annotated with @CodeFlow
+        try (final WebClient webClient = createWebClient()) {
+            HtmlPage page = webClient
+                    .getPage("http://localhost:8081/tenant/tenant-web-app-dynamic/api/user/code-flow-auth-mech-annotation");
+            assertEquals("Sign in to quarkus-webapp", page.getTitleText());
+            HtmlForm loginForm = page.getForms().get(0);
+            loginForm.getInputByName("username").setValueAttribute("alice");
+            loginForm.getInputByName("password").setValueAttribute("alice");
+            page = loginForm.getInputByName("login").click();
+            assertEquals("alice", page.getBody().asNormalizedText());
+            webClient.getCookieManager().clearCookies();
+        }
+        RestAssured.given().auth().oauth2(getAccessTokenFromSimpleOidc("1"))
+                .when().get("/tenant/tenant-oidc-no-discovery/api/user/code-flow-auth-mech-annotation")
+                .then()
+                .statusCode(401);
+
+        // endpoint is annotated with @Bearer
+        RestAssured.given().auth().oauth2(getAccessTokenFromSimpleOidc("1"))
+                .when().get("/tenant/tenant-oidc-no-discovery/api/user/bearer-auth-mech-annotation")
+                .then()
+                .statusCode(204); // ID token name is null
+        boolean codeFlowAuthFailed = false;
+        try (final WebClient webClient = createWebClient()) {
+            HtmlPage page = webClient
+                    .getPage("http://localhost:8081/tenant/tenant-web-app-dynamic/api/user/bearer-auth-mech-annotation");
+            assertEquals("Sign in to quarkus-webapp", page.getTitleText());
+            HtmlForm loginForm = page.getForms().get(0);
+            loginForm.getInputByName("username").setValueAttribute("alice");
+            loginForm.getInputByName("password").setValueAttribute("alice");
+            webClient.getOptions().setRedirectEnabled(false);
+            loginForm.getInputByName("login").click();
+        } catch (FailingHttpStatusCodeException e) {
+            codeFlowAuthFailed = true;
+        }
+        if (!codeFlowAuthFailed) {
+            Assertions.fail(
+                    "Endpoint 'bearer-auth-mech-annotation' is annotated with the @Bearer annotation, code flow auth should fail");
+        }
     }
 
     private String getAccessToken(String userName, String clientId) {
@@ -846,5 +936,18 @@ public class BearerTokenAuthorizationTest {
 
     private Cookie getSessionRtCookie(WebClient webClient, String tenantId) {
         return webClient.getCookieManager().getCookie("q_session_rt" + (tenantId == null ? "_Default_test" : "_" + tenantId));
+    }
+
+    private List<Cookie> getSessionCookies(WebClient webClient, String tenantId) {
+        String sessionCookieNameChunk = "q_session" + (tenantId == null ? "" : "_" + tenantId) + "_chunk_";
+        CookieManager cookieManager = webClient.getCookieManager();
+        SortedMap<String, Cookie> sessionCookies = new TreeMap<>();
+        for (Cookie cookie : cookieManager.getCookies()) {
+            if (cookie.getName().startsWith(sessionCookieNameChunk)) {
+                sessionCookies.put(cookie.getName(), cookie);
+            }
+        }
+
+        return sessionCookies.isEmpty() ? null : new ArrayList<Cookie>(sessionCookies.values());
     }
 }

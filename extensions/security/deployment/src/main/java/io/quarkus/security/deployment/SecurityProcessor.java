@@ -34,6 +34,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Singleton;
 
 import org.jboss.jandex.AnnotationInstance;
 import org.jboss.jandex.AnnotationTarget;
@@ -55,6 +56,7 @@ import io.quarkus.arc.processor.AnnotationStore;
 import io.quarkus.arc.processor.BuildExtension;
 import io.quarkus.arc.processor.ObserverInfo;
 import io.quarkus.builder.item.MultiBuildItem;
+import io.quarkus.deployment.Capabilities;
 import io.quarkus.deployment.Feature;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
@@ -68,6 +70,7 @@ import io.quarkus.deployment.builditem.LaunchModeBuildItem;
 import io.quarkus.deployment.builditem.NativeImageFeatureBuildItem;
 import io.quarkus.deployment.builditem.RunTimeConfigBuilderBuildItem;
 import io.quarkus.deployment.builditem.RuntimeConfigSetupCompleteBuildItem;
+import io.quarkus.deployment.builditem.ShutdownContextBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.JPMSExportBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.NativeImageSecurityProviderBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.ReflectiveClassBuildItem;
@@ -105,6 +108,7 @@ import io.quarkus.security.runtime.interceptor.SecurityConstrainer;
 import io.quarkus.security.runtime.interceptor.SecurityHandler;
 import io.quarkus.security.spi.AdditionalSecuredClassesBuildItem;
 import io.quarkus.security.spi.AdditionalSecuredMethodsBuildItem;
+import io.quarkus.security.spi.AdditionalSecurityConstrainerEventPropsBuildItem;
 import io.quarkus.security.spi.DefaultSecurityCheckBuildItem;
 import io.quarkus.security.spi.RolesAllowedConfigExpResolverBuildItem;
 import io.quarkus.security.spi.runtime.AuthorizationController;
@@ -127,7 +131,7 @@ public class SecurityProcessor {
     void produceJcaSecurityProviders(BuildProducer<JCAProviderBuildItem> jcaProviders,
             BuildProducer<BouncyCastleProviderBuildItem> bouncyCastleProvider,
             BuildProducer<BouncyCastleJsseProviderBuildItem> bouncyCastleJsseProvider) {
-        Set<String> providers = security.securityProviders.orElse(Set.of());
+        Set<String> providers = security.securityProviders().orElse(Set.of());
         for (String providerName : providers) {
             if (SecurityProviderUtils.BOUNCYCASTLE_PROVIDER_NAME.equals(providerName)) {
                 bouncyCastleProvider.produce(new BouncyCastleProviderBuildItem());
@@ -138,7 +142,8 @@ public class SecurityProcessor {
             } else if (SecurityProviderUtils.BOUNCYCASTLE_FIPS_JSSE_PROVIDER_NAME.equals(providerName)) {
                 bouncyCastleJsseProvider.produce(new BouncyCastleJsseProviderBuildItem(true));
             } else {
-                jcaProviders.produce(new JCAProviderBuildItem(providerName, security.securityProviderConfig.get(providerName)));
+                jcaProviders
+                        .produce(new JCAProviderBuildItem(providerName, security.securityProviderConfig().get(providerName)));
             }
             log.debugf("Added providerName: %s", providerName);
         }
@@ -412,7 +417,7 @@ public class SecurityProcessor {
         }
     }
 
-    private <BI extends MultiBuildItem> Optional<BI> getOne(List<BI> items) {
+    private static <BI extends MultiBuildItem> Optional<BI> getOne(List<BI> items) {
         if (items.size() > 1) {
             throw new IllegalStateException("Only a single Bouncy Castle registration can be provided.");
         }
@@ -425,7 +430,7 @@ public class SecurityProcessor {
      * @param providerName - JCA provider name
      * @return class names that make up the provider and its services
      */
-    private List<String> registerProvider(String providerName,
+    private static List<String> registerProvider(String providerName,
             String providerConfig,
             BuildProducer<NativeImageSecurityProviderBuildItem> additionalProviders) {
         List<String> providerClasses = new ArrayList<>();
@@ -457,14 +462,38 @@ public class SecurityProcessor {
         return providerClasses;
     }
 
+    @Consume(RuntimeConfigSetupCompleteBuildItem.class)
+    @Record(ExecutionTime.RUNTIME_INIT)
+    @BuildStep
+    void recordRuntimeConfigReady(SecurityCheckRecorder recorder, ShutdownContextBuildItem shutdownContextBuildItem,
+            LaunchModeBuildItem launchModeBuildItem) {
+        recorder.setRuntimeConfigReady();
+        if (launchModeBuildItem.getLaunchMode() == LaunchMode.DEVELOPMENT) {
+            recorder.unsetRuntimeConfigReady(shutdownContextBuildItem);
+        }
+    }
+
+    @Record(ExecutionTime.STATIC_INIT)
     @BuildStep
     void registerSecurityInterceptors(BuildProducer<InterceptorBindingRegistrarBuildItem> registrars,
-            BuildProducer<AdditionalBeanBuildItem> beans) {
+            BuildProducer<AdditionalBeanBuildItem> beans,
+            BuildProducer<SyntheticBeanBuildItem> syntheticBeanProducer, SecurityCheckRecorder recorder,
+            Optional<AdditionalSecurityConstrainerEventPropsBuildItem> additionalSecurityConstrainerEventsItem) {
         registrars.produce(new InterceptorBindingRegistrarBuildItem(new SecurityAnnotationsRegistrar()));
         Class<?>[] interceptors = { AuthenticatedInterceptor.class, DenyAllInterceptor.class, PermitAllInterceptor.class,
                 RolesAllowedInterceptor.class, PermissionsAllowedInterceptor.class };
         beans.produce(new AdditionalBeanBuildItem(interceptors));
-        beans.produce(new AdditionalBeanBuildItem(SecurityHandler.class, SecurityConstrainer.class));
+        beans.produce(new AdditionalBeanBuildItem(SecurityHandler.class));
+
+        var additionalEventsSupplier = additionalSecurityConstrainerEventsItem
+                .map(AdditionalSecurityConstrainerEventPropsBuildItem::getAdditionalEventPropsSupplier)
+                .orElse(null);
+        syntheticBeanProducer.produce(SyntheticBeanBuildItem
+                .configure(SecurityConstrainer.class)
+                .unremovable()
+                .scope(Singleton.class)
+                .supplier(recorder.createSecurityConstrainer(additionalEventsSupplier))
+                .done());
     }
 
     /**
@@ -496,7 +525,7 @@ public class SecurityProcessor {
     void transformSecurityAnnotations(BuildProducer<AnnotationsTransformerBuildItem> transformers,
             List<AdditionalSecuredMethodsBuildItem> additionalSecuredMethods,
             SecurityBuildTimeConfig config) {
-        if (config.denyUnannotated) {
+        if (config.denyUnannotated()) {
             transformers.produce(new AnnotationsTransformerBuildItem(new DenyingUnannotatedTransformer()));
         }
         if (!additionalSecuredMethods.isEmpty()) {
@@ -518,6 +547,7 @@ public class SecurityProcessor {
         }
     }
 
+    @Consume(Capabilities.class) // make sure extension combinations are validated before default security check
     @BuildStep
     @Record(ExecutionTime.STATIC_INIT)
     void gatherSecurityChecks(BuildProducer<SyntheticBeanBuildItem> syntheticBeans,
@@ -528,7 +558,7 @@ public class SecurityProcessor {
             BuildProducer<RunTimeConfigBuilderBuildItem> configBuilderProducer,
             List<AdditionalSecuredMethodsBuildItem> additionalSecuredMethods,
             SecurityCheckRecorder recorder,
-            Optional<DefaultSecurityCheckBuildItem> defaultSecurityCheckBuildItem,
+            List<DefaultSecurityCheckBuildItem> defaultSecurityCheckBuildItem,
             BuildProducer<ReflectiveClassBuildItem> reflectiveClassBuildItemBuildProducer,
             List<AdditionalSecurityCheckBuildItem> additionalSecurityChecks, SecurityBuildTimeConfig config) {
         classPredicate.produce(new ApplicationClassPredicateBuildItem(new SecurityCheckStorageAppPredicate()));
@@ -543,7 +573,7 @@ public class SecurityProcessor {
 
         IndexView index = beanArchiveBuildItem.getIndex();
         Map<MethodInfo, SecurityCheck> securityChecks = gatherSecurityAnnotations(index, configExpSecurityCheckProducer,
-                additionalSecured.values(), config.denyUnannotated, recorder, configBuilderProducer,
+                additionalSecured.values(), config.denyUnannotated(), recorder, configBuilderProducer,
                 reflectiveClassBuildItemBuildProducer, rolesAllowedConfigExpResolverBuildItems);
         for (AdditionalSecurityCheckBuildItem additionalSecurityCheck : additionalSecurityChecks) {
             securityChecks.put(additionalSecurityCheck.getMethodInfo(),
@@ -562,8 +592,14 @@ public class SecurityProcessor {
                     methodEntry.getValue());
         }
 
-        if (defaultSecurityCheckBuildItem.isPresent()) {
-            var roles = defaultSecurityCheckBuildItem.get().getRolesAllowed();
+        if (!defaultSecurityCheckBuildItem.isEmpty()) {
+            if (defaultSecurityCheckBuildItem.size() > 1) {
+                int itemCount = defaultSecurityCheckBuildItem.size();
+                throw new IllegalStateException("Found %d DefaultSecurityCheckBuildItem items, ".formatted(itemCount)
+                        + "please make sure the item is produced exactly once");
+            }
+
+            var roles = defaultSecurityCheckBuildItem.get(0).getRolesAllowed();
             if (roles == null) {
                 recorder.registerDefaultSecurityCheck(builder, recorder.denyAll());
             } else {
@@ -596,7 +632,7 @@ public class SecurityProcessor {
         }
     }
 
-    private Map<MethodInfo, SecurityCheck> gatherSecurityAnnotations(IndexView index,
+    private static Map<MethodInfo, SecurityCheck> gatherSecurityAnnotations(IndexView index,
             BuildProducer<ConfigExpRolesAllowedSecurityCheckBuildItem> configExpSecurityCheckProducer,
             Collection<AdditionalSecured> additionalSecuredMethods, boolean denyUnannotated, SecurityCheckRecorder recorder,
             BuildProducer<RunTimeConfigBuilderBuildItem> configBuilderProducer,
@@ -775,7 +811,7 @@ public class SecurityProcessor {
         return new HashSet<>(Arrays.asList(allowedRoles));
     }
 
-    private boolean alreadyHasAnnotation(AnnotationInstance alreadyExistingInstance, DotName annotationName) {
+    private static boolean alreadyHasAnnotation(AnnotationInstance alreadyExistingInstance, DotName annotationName) {
         return alreadyExistingInstance.target().kind() == AnnotationTarget.Kind.METHOD
                 && alreadyExistingInstance.name().equals(annotationName);
     }
@@ -785,7 +821,7 @@ public class SecurityProcessor {
                 && !"<init>".equals(methodInfo.name());
     }
 
-    private void gatherSecurityAnnotations(
+    private static void gatherSecurityAnnotations(
             IndexView index, DotName dotName,
             Map<MethodInfo, AnnotationInstance> alreadyCheckedMethods,
             Map<ClassInfo, AnnotationInstance> classLevelAnnotations,
@@ -845,7 +881,7 @@ public class SecurityProcessor {
     @BuildStep
     AdditionalBeanBuildItem authorizationController(LaunchModeBuildItem launchMode) {
         Class<? extends AuthorizationController> controllerClass = AuthorizationController.class;
-        if (launchMode.getLaunchMode() == LaunchMode.DEVELOPMENT && !security.authorizationEnabledInDevMode) {
+        if (launchMode.getLaunchMode() == LaunchMode.DEVELOPMENT && !security.authorizationEnabledInDevMode()) {
             controllerClass = DevModeDisabledAuthorizationController.class;
         }
         return AdditionalBeanBuildItem.builder().addBeanClass(controllerClass).build();
@@ -915,7 +951,7 @@ public class SecurityProcessor {
         }
     }
 
-    class SecurityCheckStorageAppPredicate implements Predicate<String> {
+    static class SecurityCheckStorageAppPredicate implements Predicate<String> {
 
         @Override
         public boolean test(String s) {
